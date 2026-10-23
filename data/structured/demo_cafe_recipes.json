@@ -1,0 +1,1707 @@
+{
+  "schema": "frangizer.recipe-structured.draft",
+  "schema_version": 0,
+  "review_status": "draft",
+  "doc_id": "demo-cafe-recipes",
+  "is_synthetic": true,
+  "is_demo": true,
+  "brand": null,
+  "conventions": {
+    "amount": "원문 문자열 그대로. 단위 환산·반올림 없음",
+    "effective_until": "미포함(이 시각부터 적용 안 됨). null이면 종료 시점 미지정",
+    "page": "PDF 파일 기준 1부터 시작. printed_page는 쪽 하단 인쇄 번호(합본 기준)",
+    "order_notes": "해당 메뉴 쪽의 '주문·제조 확인사항' 원문. HOT·ICED 공통 문장일 수 있음",
+    "change": "history_row는 메뉴 쪽 '판본 이력' 표의 해당 판본 행 원문, ingredient_changes는 직전 메뉴 판본 대비 자동 비교(첫 판본은 null)",
+    "aliases": "원문에 별칭 근거가 있는 경우만 기록",
+    "order_rules": "order_notes를 문장 단위로 나눠 분류. options·pumps는 원문에 적힌 값만(set.amount는 그 옵션일 때의 재료량), constraints는 미지원·금지·기준 없음, info는 그 밖의 안내. 얼음 옵션은 얼음이 있는 온도에만 붙인다",
+    "common_rules.options": "메뉴별 order_rules에 같은 옵션이 있으면 메뉴별 값이 우선",
+    "pumps": "원문에 펌프 횟수가 적힌 경우만. 1회 5 mL(공통 규칙 03)로 다른 값을 계산해 채우지 않는다",
+    "exposure": "답변에 쓰려면 sources[].version_id가 질의의 allowed_versions에 있고 effective_from ≤ as_of < effective_until이어야 한다. 파일에 있다는 것만으로 배포된 판본이 아니다(v1.1은 staged)"
+  },
+  "source_documents": [
+    {
+      "version": "1.0",
+      "path": "data/source/합성_카페_레시피_v1.0.pdf",
+      "repo_status": "source",
+      "sha256": "f790b8f75ef280a2ca71f43492368583d3c175a4f89c9f511982a37e76b9c148",
+      "effective_from": "2026-10-01T00:00:00+09:00",
+      "effective_until": "2026-10-26T00:00:00+09:00",
+      "change_summary": "최초 등록. 메뉴 6종(v1.0), 바닐라라테 기본 시럽 20 mL"
+    },
+    {
+      "version": "1.1",
+      "path": "data/staged/합성_카페_레시피_v1.1.pdf",
+      "repo_status": "staged",
+      "sha256": "42bf2bb0645cb2cdc6dcbec32865f18be30e8f92947ebd416ea3f0709bda7051",
+      "effective_from": "2026-10-26T00:00:00+09:00",
+      "effective_until": null,
+      "change_summary": "바닐라 시럽 20→15 mL 변경 및 허니자몽블랙티 추가"
+    }
+  ],
+  "common_rules": {
+    "rules": [
+      {
+        "no": "01",
+        "text": "이 문서는 1잔 기준이다. HOT 컵은 350 mL, ICED 컵은 500 mL로 정한다. 컵 용량은 재료를 가득 채우라는 의미가 아니다.",
+        "kind": "basis"
+      },
+      {
+        "no": "02",
+        "text": "에스프레소 1샷은 추출액 30 mL, 2샷은 60 mL다. 원두 투입량·추출 시간은 이 문서에서 정하지 않는다.",
+        "kind": "basis"
+      },
+      {
+        "no": "03",
+        "text": "바닐라 시럽의 전용 펌프 1회는 5 mL다. 초콜릿 소스·딸기 베이스·자몽 베이스·말차 파우더에는 이 펌프 환산을 적용하지 않는다.",
+        "kind": "conversion"
+      },
+      {
+        "no": "04",
+        "text": "별도 주문 옵션이 없으면 메뉴별 기본 계량을 따른다. 시럽은 mL, 파우더·소스·베이스·얼음은 g 단위를 확인한다.",
+        "kind": "basis"
+      },
+      {
+        "no": "05",
+        "text": "얼음 적게는 기본 얼음 무게의 절반이다. 얼음을 줄여도 우유·물·시럽·샷을 늘려 컵을 채우지 않는다. 얼음 없음은 얼음만 0 g으로 한다.",
+        "kind": "option"
+      },
+      {
+        "no": "06",
+        "text": "샷 추가 1회는 에스프레소 30 mL를 더한다. 샷 추가로 다른 재료량을 임의로 줄이지 않는다. 결제·가격은 이 문서의 범위 밖이다.",
+        "kind": "option"
+      },
+      {
+        "no": "07",
+        "text": "바닐라라테의 덜 달게 옵션은 해당 판본 기본 시럽량에서 5 mL를 뺀다. 바닐라 시럽 빼기는 0 mL다. 다른 메뉴의 당도 조절은 별도 기준이 없어 확인이 필요하다.",
+        "kind": "option"
+      },
+      {
+        "no": "08",
+        "text": "우유 메뉴의 기본 우유는 일반 우유다. 대체유·디카페인·재료 품절 대체는 승인 기준이 없으므로 임의로 적용하지 않고 담당자에게 확인한다.",
+        "kind": "unsupported"
+      },
+      {
+        "no": "09",
+        "text": "알레르기 무해·무카페인·식품 안전을 보장하지 않는다. 제품 원재료 표시, 교차접촉 관리와 현장 상태는 별도 확인 대상이다.",
+        "kind": "unsupported"
+      },
+      {
+        "no": "10",
+        "text": "이 문서에는 보관 온도·개봉 후 사용기한·환불 정책이 없다. 다른 메뉴의 기준이나 상식으로 수치·정책을 만들어 답하지 않는다.",
+        "kind": "unsupported"
+      },
+      {
+        "no": "11",
+        "text": "이 문서에 없는 메뉴(시즌 메뉴·신메뉴 포함)는 승인된 제조 기준이 없다. 기존 메뉴의 비율을 대입해 답하지 않고, 등록된 문서가 없다고 안내한다.",
+        "kind": "unsupported"
+      },
+      {
+        "no": "12",
+        "text": "판본은 질문 시점의 적용일로 고른다. 적용일 전의 판본은 '예정'으로 구분해 안내하고 현재 기준처럼 답하지 않는다. 판본 사이에 값이 바뀐 메뉴는 변경 전후를 함께 보여준다.",
+        "kind": "versioning"
+      }
+    ],
+    "options": [
+      {
+        "name": "샷 추가",
+        "rule": "06",
+        "per_order": true,
+        "change": {
+          "ingredient": "에스프레소",
+          "delta": "30",
+          "unit": "mL"
+        },
+        "text": "샷 추가 1회는 에스프레소 30 mL를 더한다"
+      }
+    ],
+    "source": {
+      "document_id": "demo-cafe-recipes",
+      "version_id": "demo-cafe-recipes-1.0",
+      "document_version": "1.0",
+      "path": "data/source/합성_카페_레시피_v1.0.pdf",
+      "page": 2,
+      "printed_page": 2
+    }
+  },
+  "menus": [
+    {
+      "menu_id": "americano",
+      "display_name": "아메리카노",
+      "aliases": []
+    },
+    {
+      "menu_id": "cafe_latte",
+      "display_name": "카페라테",
+      "aliases": []
+    },
+    {
+      "menu_id": "vanilla_latte",
+      "display_name": "바닐라라테",
+      "aliases": [
+        "데모 바닐라라테"
+      ]
+    },
+    {
+      "menu_id": "cafe_mocha",
+      "display_name": "카페모카",
+      "aliases": []
+    },
+    {
+      "menu_id": "matcha_latte",
+      "display_name": "말차라테",
+      "aliases": []
+    },
+    {
+      "menu_id": "strawberry_latte",
+      "display_name": "딸기라테",
+      "aliases": []
+    },
+    {
+      "menu_id": "honey_grapefruit_tea",
+      "display_name": "허니자몽블랙티",
+      "aliases": []
+    }
+  ],
+  "recipe_versions": [
+    {
+      "recipe_version_id": "americano-hot-1.0",
+      "menu_id": "americano",
+      "temperature": "HOT",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-01T00:00:00+09:00",
+      "effective_until": null,
+      "previous_recipe_version_id": null,
+      "document_versions": [
+        "1.0",
+        "1.1"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "에스프레소",
+          "amount": "60",
+          "unit": "mL"
+        },
+        {
+          "order": 2,
+          "name": "온수",
+          "amount": "240",
+          "unit": "mL"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "HOT 컵에 온수 240 mL를 넣는다."
+        },
+        {
+          "order": 2,
+          "text": "에스프레소 60 mL를 넣고 가볍게 섞는다."
+        }
+      ],
+      "order_notes": [
+        "HOT과 ICED 모두 기본 2샷이다.",
+        "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 물과 샷은 기본량을 유지한다."
+      ],
+      "order_rules": {
+        "options": [],
+        "pumps": [],
+        "constraints": [],
+        "info": [
+          {
+            "text": "HOT과 ICED 모두 기본 2샷이다."
+          }
+        ]
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.0",
+          "document_version": "1.0",
+          "path": "data/source/합성_카페_레시피_v1.0.pdf",
+          "page": 3,
+          "printed_page": 3
+        },
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.1",
+          "document_version": "1.1",
+          "path": "data/staged/합성_카페_레시피_v1.1.pdf",
+          "page": 3,
+          "printed_page": 3
+        }
+      ]
+    },
+    {
+      "recipe_version_id": "americano-iced-1.0",
+      "menu_id": "americano",
+      "temperature": "ICED",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-01T00:00:00+09:00",
+      "effective_until": null,
+      "previous_recipe_version_id": null,
+      "document_versions": [
+        "1.0",
+        "1.1"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "에스프레소",
+          "amount": "60",
+          "unit": "mL"
+        },
+        {
+          "order": 2,
+          "name": "물",
+          "amount": "180",
+          "unit": "mL"
+        },
+        {
+          "order": 3,
+          "name": "얼음",
+          "amount": "180",
+          "unit": "g"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "ICED 컵에 물 180 mL와 얼음 180 g을 넣는다."
+        },
+        {
+          "order": 2,
+          "text": "에스프레소 60 mL를 넣는다."
+        }
+      ],
+      "order_notes": [
+        "HOT과 ICED 모두 기본 2샷이다.",
+        "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 물과 샷은 기본량을 유지한다."
+      ],
+      "order_rules": {
+        "options": [
+          {
+            "name": "얼음 적게",
+            "set": {
+              "ingredient": "얼음",
+              "amount": "90",
+              "unit": "g"
+            },
+            "text": "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다."
+          },
+          {
+            "name": "얼음 없음",
+            "set": {
+              "ingredient": "얼음",
+              "amount": "0",
+              "unit": "g"
+            },
+            "text": "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다."
+          }
+        ],
+        "pumps": [],
+        "constraints": [],
+        "info": [
+          {
+            "text": "HOT과 ICED 모두 기본 2샷이다."
+          },
+          {
+            "text": "물과 샷은 기본량을 유지한다."
+          }
+        ]
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.0",
+          "document_version": "1.0",
+          "path": "data/source/합성_카페_레시피_v1.0.pdf",
+          "page": 3,
+          "printed_page": 3
+        },
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.1",
+          "document_version": "1.1",
+          "path": "data/staged/합성_카페_레시피_v1.1.pdf",
+          "page": 3,
+          "printed_page": 3
+        }
+      ]
+    },
+    {
+      "recipe_version_id": "cafe_latte-hot-1.0",
+      "menu_id": "cafe_latte",
+      "temperature": "HOT",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-01T00:00:00+09:00",
+      "effective_until": null,
+      "previous_recipe_version_id": null,
+      "document_versions": [
+        "1.0",
+        "1.1"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "에스프레소",
+          "amount": "60",
+          "unit": "mL"
+        },
+        {
+          "order": 2,
+          "name": "우유",
+          "amount": "230",
+          "unit": "mL"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "HOT 컵에 에스프레소 60 mL를 넣는다."
+        },
+        {
+          "order": 2,
+          "text": "계량한 우유 230 mL를 스팀하고 컵에 붓는다."
+        }
+      ],
+      "order_notes": [
+        "기본 레시피에는 시럽이 없다.",
+        "대체유 사용 기준은 등록되지 않았다. 일반 우유를 임의로 대체하지 않는다.",
+        "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 우유와 샷은 기본량을 유지한다."
+      ],
+      "order_rules": {
+        "options": [],
+        "pumps": [],
+        "constraints": [
+          {
+            "text": "기본 레시피에는 시럽이 없다."
+          },
+          {
+            "text": "대체유 사용 기준은 등록되지 않았다."
+          },
+          {
+            "text": "일반 우유를 임의로 대체하지 않는다."
+          }
+        ],
+        "info": []
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.0",
+          "document_version": "1.0",
+          "path": "data/source/합성_카페_레시피_v1.0.pdf",
+          "page": 4,
+          "printed_page": 4
+        },
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.1",
+          "document_version": "1.1",
+          "path": "data/staged/합성_카페_레시피_v1.1.pdf",
+          "page": 4,
+          "printed_page": 4
+        }
+      ]
+    },
+    {
+      "recipe_version_id": "cafe_latte-iced-1.0",
+      "menu_id": "cafe_latte",
+      "temperature": "ICED",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-01T00:00:00+09:00",
+      "effective_until": null,
+      "previous_recipe_version_id": null,
+      "document_versions": [
+        "1.0",
+        "1.1"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "에스프레소",
+          "amount": "60",
+          "unit": "mL"
+        },
+        {
+          "order": 2,
+          "name": "우유",
+          "amount": "180",
+          "unit": "mL"
+        },
+        {
+          "order": 3,
+          "name": "얼음",
+          "amount": "180",
+          "unit": "g"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "ICED 컵에 우유 180 mL를 넣는다."
+        },
+        {
+          "order": 2,
+          "text": "얼음 180 g을 넣고 에스프레소 60 mL를 붓는다."
+        }
+      ],
+      "order_notes": [
+        "기본 레시피에는 시럽이 없다.",
+        "대체유 사용 기준은 등록되지 않았다. 일반 우유를 임의로 대체하지 않는다.",
+        "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 우유와 샷은 기본량을 유지한다."
+      ],
+      "order_rules": {
+        "options": [
+          {
+            "name": "얼음 적게",
+            "set": {
+              "ingredient": "얼음",
+              "amount": "90",
+              "unit": "g"
+            },
+            "text": "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다."
+          },
+          {
+            "name": "얼음 없음",
+            "set": {
+              "ingredient": "얼음",
+              "amount": "0",
+              "unit": "g"
+            },
+            "text": "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다."
+          }
+        ],
+        "pumps": [],
+        "constraints": [
+          {
+            "text": "기본 레시피에는 시럽이 없다."
+          },
+          {
+            "text": "대체유 사용 기준은 등록되지 않았다."
+          },
+          {
+            "text": "일반 우유를 임의로 대체하지 않는다."
+          }
+        ],
+        "info": [
+          {
+            "text": "우유와 샷은 기본량을 유지한다."
+          }
+        ]
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.0",
+          "document_version": "1.0",
+          "path": "data/source/합성_카페_레시피_v1.0.pdf",
+          "page": 4,
+          "printed_page": 4
+        },
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.1",
+          "document_version": "1.1",
+          "path": "data/staged/합성_카페_레시피_v1.1.pdf",
+          "page": 4,
+          "printed_page": 4
+        }
+      ]
+    },
+    {
+      "recipe_version_id": "vanilla_latte-hot-1.0",
+      "menu_id": "vanilla_latte",
+      "temperature": "HOT",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-01T00:00:00+09:00",
+      "effective_until": "2026-10-26T00:00:00+09:00",
+      "previous_recipe_version_id": null,
+      "document_versions": [
+        "1.0"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "에스프레소",
+          "amount": "60",
+          "unit": "mL"
+        },
+        {
+          "order": 2,
+          "name": "바닐라 시럽",
+          "amount": "20",
+          "unit": "mL"
+        },
+        {
+          "order": 3,
+          "name": "우유",
+          "amount": "210",
+          "unit": "mL"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "HOT 컵에 바닐라 시럽 20 mL와 에스프레소 60 mL를 넣어 섞는다."
+        },
+        {
+          "order": 2,
+          "text": "계량한 우유 210 mL를 스팀하고 컵에 붓는다."
+        }
+      ],
+      "order_notes": [
+        "v1.0의 기본 시럽 20 mL는 전용 펌프 4회다. HOT과 ICED에 동일하게 적용한다.",
+        "v1.0의 덜 달게는 시럽 15 mL, 전용 펌프 3회다. 시럽 빼기는 0 mL다.",
+        "2026-10-26부터는 v1.1(앞 쪽)로 바뀌어 기본 시럽이 15 mL가 된다."
+      ],
+      "order_rules": {
+        "options": [
+          {
+            "name": "덜 달게",
+            "set": {
+              "ingredient": "바닐라 시럽",
+              "amount": "15",
+              "unit": "mL",
+              "pumps": "3"
+            },
+            "text": "v1.0의 덜 달게는 시럽 15 mL, 전용 펌프 3회다."
+          },
+          {
+            "name": "시럽 빼기",
+            "set": {
+              "ingredient": "바닐라 시럽",
+              "amount": "0",
+              "unit": "mL"
+            },
+            "text": "시럽 빼기는 0 mL다."
+          }
+        ],
+        "pumps": [
+          {
+            "ingredient": "바닐라 시럽",
+            "amount": "20",
+            "unit": "mL",
+            "pumps": "4",
+            "text": "v1.0의 기본 시럽 20 mL는 전용 펌프 4회다."
+          }
+        ],
+        "constraints": [],
+        "info": [
+          {
+            "text": "HOT과 ICED에 동일하게 적용한다."
+          },
+          {
+            "text": "2026-10-26부터는 v1.1(앞 쪽)로 바뀌어 기본 시럽이 15 mL가 된다."
+          }
+        ]
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01 ~ 2026-10-25",
+          "content": "기본 시럽 20 mL(펌프 4회), 덜 달게 15 mL(펌프 3회)"
+        },
+        "ingredient_changes": null
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.0",
+          "document_version": "1.0",
+          "path": "data/source/합성_카페_레시피_v1.0.pdf",
+          "page": 5,
+          "printed_page": 6
+        }
+      ]
+    },
+    {
+      "recipe_version_id": "vanilla_latte-hot-1.1",
+      "menu_id": "vanilla_latte",
+      "temperature": "HOT",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-26T00:00:00+09:00",
+      "effective_until": null,
+      "previous_recipe_version_id": "vanilla_latte-hot-1.0",
+      "document_versions": [
+        "1.1"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "에스프레소",
+          "amount": "60",
+          "unit": "mL"
+        },
+        {
+          "order": 2,
+          "name": "바닐라 시럽",
+          "amount": "15",
+          "unit": "mL"
+        },
+        {
+          "order": 3,
+          "name": "우유",
+          "amount": "210",
+          "unit": "mL"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "HOT 컵에 바닐라 시럽 15 mL와 에스프레소 60 mL를 넣어 섞는다."
+        },
+        {
+          "order": 2,
+          "text": "계량한 우유 210 mL를 스팀하고 컵에 붓는다."
+        }
+      ],
+      "order_notes": [
+        "v1.1의 기본 시럽 15 mL는 전용 펌프 3회다. HOT과 ICED에 동일하게 적용한다.",
+        "v1.1의 덜 달게는 시럽 10 mL, 전용 펌프 2회다. 시럽 빼기는 0 mL다.",
+        "v1.0 대비 시럽이 5 mL 줄었다. 우유·샷·얼음량은 v1.0과 동일하며, 줄어든 시럽량을 다른 재료로 보충하지 않는다.",
+        "2026-10-26 0시 전에는 이 판본이 아니라 v1.0(다음 쪽)을 기준으로 한다."
+      ],
+      "order_rules": {
+        "options": [
+          {
+            "name": "덜 달게",
+            "set": {
+              "ingredient": "바닐라 시럽",
+              "amount": "10",
+              "unit": "mL",
+              "pumps": "2"
+            },
+            "text": "v1.1의 덜 달게는 시럽 10 mL, 전용 펌프 2회다."
+          },
+          {
+            "name": "시럽 빼기",
+            "set": {
+              "ingredient": "바닐라 시럽",
+              "amount": "0",
+              "unit": "mL"
+            },
+            "text": "시럽 빼기는 0 mL다."
+          }
+        ],
+        "pumps": [
+          {
+            "ingredient": "바닐라 시럽",
+            "amount": "15",
+            "unit": "mL",
+            "pumps": "3",
+            "text": "v1.1의 기본 시럽 15 mL는 전용 펌프 3회다."
+          }
+        ],
+        "constraints": [
+          {
+            "text": "우유·샷·얼음량은 v1.0과 동일하며, 줄어든 시럽량을 다른 재료로 보충하지 않는다."
+          }
+        ],
+        "info": [
+          {
+            "text": "HOT과 ICED에 동일하게 적용한다."
+          },
+          {
+            "text": "v1.0 대비 시럽이 5 mL 줄었다."
+          },
+          {
+            "text": "2026-10-26 0시 전에는 이 판본이 아니라 v1.0(다음 쪽)을 기준으로 한다."
+          }
+        ]
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-26 ~",
+          "content": "기본 시럽 15 mL(펌프 3회), 덜 달게 10 mL(펌프 2회). 우유·샷·얼음은 변경 없음"
+        },
+        "ingredient_changes": [
+          {
+            "name": "바닐라 시럽",
+            "before": {
+              "amount": "20",
+              "unit": "mL"
+            },
+            "after": {
+              "amount": "15",
+              "unit": "mL"
+            }
+          }
+        ]
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.1",
+          "document_version": "1.1",
+          "path": "data/staged/합성_카페_레시피_v1.1.pdf",
+          "page": 5,
+          "printed_page": 5
+        }
+      ]
+    },
+    {
+      "recipe_version_id": "vanilla_latte-iced-1.0",
+      "menu_id": "vanilla_latte",
+      "temperature": "ICED",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-01T00:00:00+09:00",
+      "effective_until": "2026-10-26T00:00:00+09:00",
+      "previous_recipe_version_id": null,
+      "document_versions": [
+        "1.0"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "에스프레소",
+          "amount": "60",
+          "unit": "mL"
+        },
+        {
+          "order": 2,
+          "name": "바닐라 시럽",
+          "amount": "20",
+          "unit": "mL"
+        },
+        {
+          "order": 3,
+          "name": "우유",
+          "amount": "170",
+          "unit": "mL"
+        },
+        {
+          "order": 4,
+          "name": "얼음",
+          "amount": "180",
+          "unit": "g"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "바닐라 시럽 20 mL와 에스프레소 60 mL를 별도 용기에서 섞는다."
+        },
+        {
+          "order": 2,
+          "text": "ICED 컵에 우유 170 mL와 얼음 180 g을 넣는다."
+        },
+        {
+          "order": 3,
+          "text": "시럽과 에스프레소 혼합액을 붓는다."
+        }
+      ],
+      "order_notes": [
+        "v1.0의 기본 시럽 20 mL는 전용 펌프 4회다. HOT과 ICED에 동일하게 적용한다.",
+        "v1.0의 덜 달게는 시럽 15 mL, 전용 펌프 3회다. 시럽 빼기는 0 mL다.",
+        "2026-10-26부터는 v1.1(앞 쪽)로 바뀌어 기본 시럽이 15 mL가 된다."
+      ],
+      "order_rules": {
+        "options": [
+          {
+            "name": "덜 달게",
+            "set": {
+              "ingredient": "바닐라 시럽",
+              "amount": "15",
+              "unit": "mL",
+              "pumps": "3"
+            },
+            "text": "v1.0의 덜 달게는 시럽 15 mL, 전용 펌프 3회다."
+          },
+          {
+            "name": "시럽 빼기",
+            "set": {
+              "ingredient": "바닐라 시럽",
+              "amount": "0",
+              "unit": "mL"
+            },
+            "text": "시럽 빼기는 0 mL다."
+          }
+        ],
+        "pumps": [
+          {
+            "ingredient": "바닐라 시럽",
+            "amount": "20",
+            "unit": "mL",
+            "pumps": "4",
+            "text": "v1.0의 기본 시럽 20 mL는 전용 펌프 4회다."
+          }
+        ],
+        "constraints": [],
+        "info": [
+          {
+            "text": "HOT과 ICED에 동일하게 적용한다."
+          },
+          {
+            "text": "2026-10-26부터는 v1.1(앞 쪽)로 바뀌어 기본 시럽이 15 mL가 된다."
+          }
+        ]
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01 ~ 2026-10-25",
+          "content": "기본 시럽 20 mL(펌프 4회), 덜 달게 15 mL(펌프 3회)"
+        },
+        "ingredient_changes": null
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.0",
+          "document_version": "1.0",
+          "path": "data/source/합성_카페_레시피_v1.0.pdf",
+          "page": 5,
+          "printed_page": 6
+        }
+      ]
+    },
+    {
+      "recipe_version_id": "vanilla_latte-iced-1.1",
+      "menu_id": "vanilla_latte",
+      "temperature": "ICED",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-26T00:00:00+09:00",
+      "effective_until": null,
+      "previous_recipe_version_id": "vanilla_latte-iced-1.0",
+      "document_versions": [
+        "1.1"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "에스프레소",
+          "amount": "60",
+          "unit": "mL"
+        },
+        {
+          "order": 2,
+          "name": "바닐라 시럽",
+          "amount": "15",
+          "unit": "mL"
+        },
+        {
+          "order": 3,
+          "name": "우유",
+          "amount": "170",
+          "unit": "mL"
+        },
+        {
+          "order": 4,
+          "name": "얼음",
+          "amount": "180",
+          "unit": "g"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "바닐라 시럽 15 mL와 에스프레소 60 mL를 별도 용기에서 섞는다."
+        },
+        {
+          "order": 2,
+          "text": "ICED 컵에 우유 170 mL와 얼음 180 g을 넣는다."
+        },
+        {
+          "order": 3,
+          "text": "시럽과 에스프레소 혼합액을 붓는다."
+        }
+      ],
+      "order_notes": [
+        "v1.1의 기본 시럽 15 mL는 전용 펌프 3회다. HOT과 ICED에 동일하게 적용한다.",
+        "v1.1의 덜 달게는 시럽 10 mL, 전용 펌프 2회다. 시럽 빼기는 0 mL다.",
+        "v1.0 대비 시럽이 5 mL 줄었다. 우유·샷·얼음량은 v1.0과 동일하며, 줄어든 시럽량을 다른 재료로 보충하지 않는다.",
+        "2026-10-26 0시 전에는 이 판본이 아니라 v1.0(다음 쪽)을 기준으로 한다."
+      ],
+      "order_rules": {
+        "options": [
+          {
+            "name": "덜 달게",
+            "set": {
+              "ingredient": "바닐라 시럽",
+              "amount": "10",
+              "unit": "mL",
+              "pumps": "2"
+            },
+            "text": "v1.1의 덜 달게는 시럽 10 mL, 전용 펌프 2회다."
+          },
+          {
+            "name": "시럽 빼기",
+            "set": {
+              "ingredient": "바닐라 시럽",
+              "amount": "0",
+              "unit": "mL"
+            },
+            "text": "시럽 빼기는 0 mL다."
+          }
+        ],
+        "pumps": [
+          {
+            "ingredient": "바닐라 시럽",
+            "amount": "15",
+            "unit": "mL",
+            "pumps": "3",
+            "text": "v1.1의 기본 시럽 15 mL는 전용 펌프 3회다."
+          }
+        ],
+        "constraints": [
+          {
+            "text": "우유·샷·얼음량은 v1.0과 동일하며, 줄어든 시럽량을 다른 재료로 보충하지 않는다."
+          }
+        ],
+        "info": [
+          {
+            "text": "HOT과 ICED에 동일하게 적용한다."
+          },
+          {
+            "text": "v1.0 대비 시럽이 5 mL 줄었다."
+          },
+          {
+            "text": "2026-10-26 0시 전에는 이 판본이 아니라 v1.0(다음 쪽)을 기준으로 한다."
+          }
+        ]
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-26 ~",
+          "content": "기본 시럽 15 mL(펌프 3회), 덜 달게 10 mL(펌프 2회). 우유·샷·얼음은 변경 없음"
+        },
+        "ingredient_changes": [
+          {
+            "name": "바닐라 시럽",
+            "before": {
+              "amount": "20",
+              "unit": "mL"
+            },
+            "after": {
+              "amount": "15",
+              "unit": "mL"
+            }
+          }
+        ]
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.1",
+          "document_version": "1.1",
+          "path": "data/staged/합성_카페_레시피_v1.1.pdf",
+          "page": 5,
+          "printed_page": 5
+        }
+      ]
+    },
+    {
+      "recipe_version_id": "cafe_mocha-hot-1.0",
+      "menu_id": "cafe_mocha",
+      "temperature": "HOT",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-01T00:00:00+09:00",
+      "effective_until": null,
+      "previous_recipe_version_id": null,
+      "document_versions": [
+        "1.0",
+        "1.1"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "에스프레소",
+          "amount": "60",
+          "unit": "mL"
+        },
+        {
+          "order": 2,
+          "name": "초콜릿 소스",
+          "amount": "25",
+          "unit": "g"
+        },
+        {
+          "order": 3,
+          "name": "우유",
+          "amount": "200",
+          "unit": "mL"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "HOT 컵에 초콜릿 소스 25 g과 에스프레소 60 mL를 넣어 섞는다."
+        },
+        {
+          "order": 2,
+          "text": "계량한 우유 200 mL를 스팀하고 컵에 붓는다."
+        }
+      ],
+      "order_notes": [
+        "초콜릿 소스는 저울로 25 g을 계량한다. 시럽 펌프 횟수로 환산하지 않는다.",
+        "휘핑크림은 기본 구성에 없으며 임의로 추가하지 않는다.",
+        "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 우유와 샷은 기본량을 유지한다."
+      ],
+      "order_rules": {
+        "options": [],
+        "pumps": [],
+        "constraints": [
+          {
+            "text": "시럽 펌프 횟수로 환산하지 않는다."
+          },
+          {
+            "text": "휘핑크림은 기본 구성에 없으며 임의로 추가하지 않는다."
+          }
+        ],
+        "info": [
+          {
+            "text": "초콜릿 소스는 저울로 25 g을 계량한다."
+          }
+        ]
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.0",
+          "document_version": "1.0",
+          "path": "data/source/합성_카페_레시피_v1.0.pdf",
+          "page": 6,
+          "printed_page": 7
+        },
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.1",
+          "document_version": "1.1",
+          "path": "data/staged/합성_카페_레시피_v1.1.pdf",
+          "page": 6,
+          "printed_page": 7
+        }
+      ]
+    },
+    {
+      "recipe_version_id": "cafe_mocha-iced-1.0",
+      "menu_id": "cafe_mocha",
+      "temperature": "ICED",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-01T00:00:00+09:00",
+      "effective_until": null,
+      "previous_recipe_version_id": null,
+      "document_versions": [
+        "1.0",
+        "1.1"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "에스프레소",
+          "amount": "60",
+          "unit": "mL"
+        },
+        {
+          "order": 2,
+          "name": "초콜릿 소스",
+          "amount": "25",
+          "unit": "g"
+        },
+        {
+          "order": 3,
+          "name": "우유",
+          "amount": "160",
+          "unit": "mL"
+        },
+        {
+          "order": 4,
+          "name": "얼음",
+          "amount": "180",
+          "unit": "g"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "초콜릿 소스 25 g을 에스프레소 60 mL에 충분히 섞는다."
+        },
+        {
+          "order": 2,
+          "text": "ICED 컵에 우유 160 mL와 얼음 180 g을 넣는다."
+        },
+        {
+          "order": 3,
+          "text": "초콜릿과 에스프레소 혼합액을 붓는다."
+        }
+      ],
+      "order_notes": [
+        "초콜릿 소스는 저울로 25 g을 계량한다. 시럽 펌프 횟수로 환산하지 않는다.",
+        "휘핑크림은 기본 구성에 없으며 임의로 추가하지 않는다.",
+        "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 우유와 샷은 기본량을 유지한다."
+      ],
+      "order_rules": {
+        "options": [
+          {
+            "name": "얼음 적게",
+            "set": {
+              "ingredient": "얼음",
+              "amount": "90",
+              "unit": "g"
+            },
+            "text": "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다."
+          },
+          {
+            "name": "얼음 없음",
+            "set": {
+              "ingredient": "얼음",
+              "amount": "0",
+              "unit": "g"
+            },
+            "text": "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다."
+          }
+        ],
+        "pumps": [],
+        "constraints": [
+          {
+            "text": "시럽 펌프 횟수로 환산하지 않는다."
+          },
+          {
+            "text": "휘핑크림은 기본 구성에 없으며 임의로 추가하지 않는다."
+          }
+        ],
+        "info": [
+          {
+            "text": "초콜릿 소스는 저울로 25 g을 계량한다."
+          },
+          {
+            "text": "우유와 샷은 기본량을 유지한다."
+          }
+        ]
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.0",
+          "document_version": "1.0",
+          "path": "data/source/합성_카페_레시피_v1.0.pdf",
+          "page": 6,
+          "printed_page": 7
+        },
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.1",
+          "document_version": "1.1",
+          "path": "data/staged/합성_카페_레시피_v1.1.pdf",
+          "page": 6,
+          "printed_page": 7
+        }
+      ]
+    },
+    {
+      "recipe_version_id": "matcha_latte-hot-1.0",
+      "menu_id": "matcha_latte",
+      "temperature": "HOT",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-01T00:00:00+09:00",
+      "effective_until": null,
+      "previous_recipe_version_id": null,
+      "document_versions": [
+        "1.0",
+        "1.1"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "말차 파우더",
+          "amount": "20",
+          "unit": "g"
+        },
+        {
+          "order": 2,
+          "name": "온수",
+          "amount": "40",
+          "unit": "mL"
+        },
+        {
+          "order": 3,
+          "name": "우유",
+          "amount": "220",
+          "unit": "mL"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "말차 파우더 20 g을 온수 40 mL에 충분히 풀어준다."
+        },
+        {
+          "order": 2,
+          "text": "HOT 컵에 말차 혼합액을 넣는다."
+        },
+        {
+          "order": 3,
+          "text": "계량한 우유 220 mL를 스팀하고 컵에 붓는다."
+        }
+      ],
+      "order_notes": [
+        "레시피에 에스프레소는 포함되지 않는다. 이것이 무카페인이라는 의미는 아니다.",
+        "파우더를 우유에 바로 넣는 방식은 이 문서의 제조 순서가 아니다.",
+        "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 우유와 말차 혼합액은 기본량을 유지한다."
+      ],
+      "order_rules": {
+        "options": [],
+        "pumps": [],
+        "constraints": [
+          {
+            "text": "레시피에 에스프레소는 포함되지 않는다."
+          },
+          {
+            "text": "이것이 무카페인이라는 의미는 아니다."
+          },
+          {
+            "text": "파우더를 우유에 바로 넣는 방식은 이 문서의 제조 순서가 아니다."
+          }
+        ],
+        "info": []
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.0",
+          "document_version": "1.0",
+          "path": "data/source/합성_카페_레시피_v1.0.pdf",
+          "page": 7,
+          "printed_page": 8
+        },
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.1",
+          "document_version": "1.1",
+          "path": "data/staged/합성_카페_레시피_v1.1.pdf",
+          "page": 7,
+          "printed_page": 8
+        }
+      ]
+    },
+    {
+      "recipe_version_id": "matcha_latte-iced-1.0",
+      "menu_id": "matcha_latte",
+      "temperature": "ICED",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-01T00:00:00+09:00",
+      "effective_until": null,
+      "previous_recipe_version_id": null,
+      "document_versions": [
+        "1.0",
+        "1.1"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "말차 파우더",
+          "amount": "20",
+          "unit": "g"
+        },
+        {
+          "order": 2,
+          "name": "온수",
+          "amount": "40",
+          "unit": "mL"
+        },
+        {
+          "order": 3,
+          "name": "우유",
+          "amount": "180",
+          "unit": "mL"
+        },
+        {
+          "order": 4,
+          "name": "얼음",
+          "amount": "180",
+          "unit": "g"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "말차 파우더 20 g을 온수 40 mL에 충분히 풀어준다."
+        },
+        {
+          "order": 2,
+          "text": "ICED 컵에 우유 180 mL와 얼음 180 g을 넣는다."
+        },
+        {
+          "order": 3,
+          "text": "말차 혼합액을 붓고 섞는다."
+        }
+      ],
+      "order_notes": [
+        "레시피에 에스프레소는 포함되지 않는다. 이것이 무카페인이라는 의미는 아니다.",
+        "파우더를 우유에 바로 넣는 방식은 이 문서의 제조 순서가 아니다.",
+        "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 우유와 말차 혼합액은 기본량을 유지한다."
+      ],
+      "order_rules": {
+        "options": [
+          {
+            "name": "얼음 적게",
+            "set": {
+              "ingredient": "얼음",
+              "amount": "90",
+              "unit": "g"
+            },
+            "text": "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다."
+          },
+          {
+            "name": "얼음 없음",
+            "set": {
+              "ingredient": "얼음",
+              "amount": "0",
+              "unit": "g"
+            },
+            "text": "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다."
+          }
+        ],
+        "pumps": [],
+        "constraints": [
+          {
+            "text": "레시피에 에스프레소는 포함되지 않는다."
+          },
+          {
+            "text": "이것이 무카페인이라는 의미는 아니다."
+          },
+          {
+            "text": "파우더를 우유에 바로 넣는 방식은 이 문서의 제조 순서가 아니다."
+          }
+        ],
+        "info": [
+          {
+            "text": "우유와 말차 혼합액은 기본량을 유지한다."
+          }
+        ]
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.0",
+          "document_version": "1.0",
+          "path": "data/source/합성_카페_레시피_v1.0.pdf",
+          "page": 7,
+          "printed_page": 8
+        },
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.1",
+          "document_version": "1.1",
+          "path": "data/staged/합성_카페_레시피_v1.1.pdf",
+          "page": 7,
+          "printed_page": 8
+        }
+      ]
+    },
+    {
+      "recipe_version_id": "strawberry_latte-iced-1.0",
+      "menu_id": "strawberry_latte",
+      "temperature": "ICED",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-01T00:00:00+09:00",
+      "effective_until": null,
+      "previous_recipe_version_id": null,
+      "document_versions": [
+        "1.0",
+        "1.1"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "딸기 베이스",
+          "amount": "80",
+          "unit": "g"
+        },
+        {
+          "order": 2,
+          "name": "우유",
+          "amount": "200",
+          "unit": "mL"
+        },
+        {
+          "order": 3,
+          "name": "얼음",
+          "amount": "150",
+          "unit": "g"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "ICED 컵 바닥에 딸기 베이스 80 g을 넣는다."
+        },
+        {
+          "order": 2,
+          "text": "얼음 150 g을 넣는다."
+        },
+        {
+          "order": 3,
+          "text": "우유 200 mL를 천천히 붓고 제공 전 섞어 마시도록 안내한다."
+        }
+      ],
+      "order_notes": [
+        "ICED만 등록된 메뉴다. HOT 제조는 지원하지 않는다.",
+        "딸기 베이스 품절 시 생딸기·딸기잼 등으로 바꾸는 기준은 없다.",
+        "얼음 적게는 75 g이며 우유는 200 mL 그대로다."
+      ],
+      "order_rules": {
+        "options": [
+          {
+            "name": "얼음 적게",
+            "set": {
+              "ingredient": "얼음",
+              "amount": "75",
+              "unit": "g"
+            },
+            "text": "얼음 적게는 75 g이며 우유는 200 mL 그대로다."
+          }
+        ],
+        "pumps": [],
+        "constraints": [
+          {
+            "text": "HOT 제조는 지원하지 않는다."
+          },
+          {
+            "text": "딸기 베이스 품절 시 생딸기·딸기잼 등으로 바꾸는 기준은 없다."
+          }
+        ],
+        "info": [
+          {
+            "text": "ICED만 등록된 메뉴다."
+          }
+        ]
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.0",
+          "document_version": "1.0",
+          "path": "data/source/합성_카페_레시피_v1.0.pdf",
+          "page": 8,
+          "printed_page": 9
+        },
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.1",
+          "document_version": "1.1",
+          "path": "data/staged/합성_카페_레시피_v1.1.pdf",
+          "page": 8,
+          "printed_page": 9
+        }
+      ]
+    },
+    {
+      "recipe_version_id": "honey_grapefruit_tea-iced-1.1",
+      "menu_id": "honey_grapefruit_tea",
+      "temperature": "ICED",
+      "serving_basis": "1잔",
+      "effective_from": "2026-10-26T00:00:00+09:00",
+      "effective_until": null,
+      "previous_recipe_version_id": null,
+      "document_versions": [
+        "1.1"
+      ],
+      "ingredients": [
+        {
+          "order": 1,
+          "name": "미리 준비한 홍차",
+          "amount": "150",
+          "unit": "mL"
+        },
+        {
+          "order": 2,
+          "name": "자몽 베이스",
+          "amount": "60",
+          "unit": "g"
+        },
+        {
+          "order": 3,
+          "name": "꿀",
+          "amount": "10",
+          "unit": "g"
+        },
+        {
+          "order": 4,
+          "name": "얼음",
+          "amount": "160",
+          "unit": "g"
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "text": "별도 용기에서 홍차 150 mL, 자몽 베이스 60 g, 꿀 10 g을 섞는다."
+        },
+        {
+          "order": 2,
+          "text": "ICED 컵에 얼음 160 g을 넣는다."
+        },
+        {
+          "order": 3,
+          "text": "홍차 혼합액을 붓는다."
+        }
+      ],
+      "order_notes": [
+        "v1.1에서 추가되는 ICED 전용 가상 신메뉴다. 2026-10-26 전에는 승인된 제조 기준이 없다.",
+        "홍차 우림 조건·원재료 보관 조건은 이 문서에서 정하지 않는다.",
+        "얼음 적게는 80 g이며 나머지 재료량은 동일하다."
+      ],
+      "order_rules": {
+        "options": [
+          {
+            "name": "얼음 적게",
+            "set": {
+              "ingredient": "얼음",
+              "amount": "80",
+              "unit": "g"
+            },
+            "text": "얼음 적게는 80 g이며 나머지 재료량은 동일하다."
+          }
+        ],
+        "pumps": [],
+        "constraints": [
+          {
+            "text": "2026-10-26 전에는 승인된 제조 기준이 없다."
+          },
+          {
+            "text": "홍차 우림 조건·원재료 보관 조건은 이 문서에서 정하지 않는다."
+          }
+        ],
+        "info": [
+          {
+            "text": "v1.1에서 추가되는 ICED 전용 가상 신메뉴다."
+          }
+        ]
+      },
+      "change": {
+        "history_row": {
+          "applied": "2026-10-26",
+          "content": "신규 등록 (ICED 전용)"
+        },
+        "ingredient_changes": null
+      },
+      "sources": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.1",
+          "document_version": "1.1",
+          "path": "data/staged/합성_카페_레시피_v1.1.pdf",
+          "page": 9,
+          "printed_page": 10
+        }
+      ]
+    }
+  ],
+  "review": {
+    "wrap_joins": [
+      [
+        "만들어|답하지",
+        true
+      ],
+      [
+        "메뉴의|당도",
+        true
+      ],
+      [
+        "문|서의",
+        false
+      ],
+      [
+        "않|고,",
+        false
+      ],
+      [
+        "않는|다.",
+        false
+      ],
+      [
+        "없음|은",
+        false
+      ],
+      [
+        "의|미가",
+        false
+      ],
+      [
+        "적용하|지",
+        false
+      ],
+      [
+        "확|인",
+        false
+      ],
+      [
+        "확인한|다.",
+        false
+      ],
+      [
+        "환산을|적용하지",
+        true
+      ]
+    ],
+    "wrap_joins_note": "PDF 줄바꿈을 이어 붙인 자리. 띄어쓰기 여부는 SPACE_AT_WRAP 검수 목록으로 결정",
+    "open_questions": [
+      "MVP는 RAG 내부 조회용(B). RDB 적재는 E2E 이후 확장에서 C와 형식 확정",
+      "메뉴·옵션 해석(질문 → menu_id·temperature·옵션 이름)은 B 몫. 이 파일은 해석 결과로 값을 고르는 기준만 제공"
+    ]
+  }
+}
