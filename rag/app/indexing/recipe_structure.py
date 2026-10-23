@@ -136,6 +136,76 @@ def load_versions():
     return sorted(docs, key=lambda d: [int(x) for x in d["upload_metadata"]["version"].split(".")])
 
 
+# 확인사항 문장 → 옵션·미지원 사항. 원문에 적힌 값만 뽑고, 패턴에 안 맞는 문장은 info로 남긴다.
+ICE_LESS_RE = re.compile(r"얼음 적게(?: 주문)?(?:은|는) (\d+) g")
+ICE_NONE_RE = re.compile(r"얼음 없음은 (\d+) g")
+LESS_SWEET_RE = re.compile(r"덜 달게는 시럽 (\d+) mL, 전용 펌프 (\d+)회")
+NO_SYRUP_RE = re.compile(r"시럽 빼기는 (\d+) mL")
+BASE_PUMP_RE = re.compile(r"기본 시럽 (\d+) mL는 전용 펌프 (\d+)회")
+CONSTRAINT_RE = re.compile(
+    r"지원하지 않는다|기준은 없다|기준이 없다|등록되지 않았다|정하지 않는다|임의로 \S+ 않는다|환산하지 않는다"
+    r"|보충하지 않는다|제조 순서가 아니다|의미는 아니다|포함되지 않는다|시럽이 없다|기본 구성에 없")
+# 공통 규칙 번호 → 종류. 문구가 바뀌면 check()의 keyword 대조에서 걸린다.
+COMMON_RULE_KIND = {
+    "01": ("basis", "1잔 기준"), "02": ("basis", "1샷은"), "03": ("conversion", "펌프 1회는 5 mL"),
+    "04": ("basis", "기본 계량"), "05": ("option", "얼음 적게"), "06": ("option", "샷 추가 1회"),
+    "07": ("option", "덜 달게"), "08": ("unsupported", "대체유"), "09": ("unsupported", "보장하지 않는다"),
+    "10": ("unsupported", "환불 정책"), "11": ("unsupported", "없는 메뉴"), "12": ("versioning", "적용일"),
+}
+# 공통 규칙에서 값이 명시된 옵션만. 메뉴별 값이 있으면 메뉴별 값이 우선이다.
+COMMON_OPTIONS = [
+    {"name": "샷 추가", "rule": "06", "per_order": True,
+     "change": {"ingredient": "에스프레소", "delta": "30", "unit": "mL"}, "phrase": "샷 추가 1회는 에스프레소 30 mL를 더한다"},
+]
+
+
+def split_sentences(text):
+    return [s for s in re.split(r"(?<=다\.)\s+", text) if s]
+
+
+def structure_notes(notes, ingredients):
+    """메뉴 쪽 확인사항 → {options, pumps, constraints, info}. 값은 원문 문자열, 근거 문장(text) 포함."""
+    names = {i["name"]: i for i in ingredients}
+    syrup = next((n for n in names if "시럽" in n), None)
+    out = {"options": [], "pumps": [], "constraints": [], "info": []}
+    for note in notes:
+        if "얼음" not in names and (ICE_LESS_RE.search(note) or ICE_NONE_RE.search(note)):
+            continue  # 얼음이 없는 온도(HOT)에는 얼음 옵션 문단(딸린 '기본량 유지' 문장 포함)을 붙이지 않는다
+        for s in split_sentences(note):
+            hit = False
+            if "얼음" in names:
+                for rx, name in ((ICE_LESS_RE, "얼음 적게"), (ICE_NONE_RE, "얼음 없음")):
+                    m = rx.search(s)
+                    if m:
+                        out["options"].append({"name": name, "set": {"ingredient": "얼음", "amount": m.group(1), "unit": "g"},
+                                               "text": s})
+                        hit = True
+            if syrup:
+                m = LESS_SWEET_RE.search(s)
+                if m:
+                    out["options"].append({"name": "덜 달게", "set": {"ingredient": syrup, "amount": m.group(1), "unit": "mL",
+                                                                   "pumps": m.group(2)}, "text": s})
+                    hit = True
+                m = NO_SYRUP_RE.search(s)
+                if m:
+                    out["options"].append({"name": "시럽 빼기", "set": {"ingredient": syrup, "amount": m.group(1), "unit": "mL"},
+                                           "text": s})
+                    hit = True
+                m = BASE_PUMP_RE.search(s)
+                if m:
+                    if m.group(1) != names[syrup]["amount"]:
+                        raise ValueError(f"펌프 문장의 기본 시럽({m.group(1)})과 재료표({names[syrup]['amount']})가 다름")
+                    out["pumps"].append({"ingredient": syrup, "amount": m.group(1), "unit": "mL", "pumps": m.group(2),
+                                         "text": s})
+                    hit = True
+            if CONSTRAINT_RE.search(s):
+                out["constraints"].append({"text": s})
+                hit = True
+            if not hit:
+                out["info"].append({"text": s})
+    return out
+
+
 def ingredient_changes(prev, cur):
     """직전 판본 대비 재료 변화. 값은 원문 문자열 그대로 비교한다."""
     before = {i["name"]: i for i in prev["ingredients"]}
@@ -172,10 +242,14 @@ def build():
         original_pages = doc.get("derived_from", {}).get("original_pages")
         for idx, pg in enumerate(pdf):
             text = pg.get_text()
-            src = {"document_version": version, "path": f"data/{doc['path']}", "page": idx + 1,
+            src = {"document_id": doc["server"]["document_id"], "version_id": doc["server"]["version_id"],
+                   "document_version": version, "path": f"data/{doc['path']}", "page": idx + 1,
                    "printed_page": original_pages[idx] if original_pages else idx + 1}
             if rules is None and "공통 계량과 주문 옵션" in text:
-                rules = {"rules": parse_common_rules(text.split("공통 계량과 주문 옵션", 1)[1].split("메뉴별 본문과", 1)[0]),
+                parsed = parse_common_rules(text.split("공통 계량과 주문 옵션", 1)[1].split("메뉴별 본문과", 1)[0])
+                rules = {"rules": [{**r, "kind": COMMON_RULE_KIND[r["no"]][0]} for r in parsed],
+                         "options": [{k: v for k, v in o.items() if k != "phrase"} | {"text": o["phrase"]}
+                                     for o in COMMON_OPTIONS],
                          "source": src}
             page = parse_menu_page(text)
             if not page:
@@ -212,6 +286,7 @@ def build():
                 "ingredients": h["_content"]["ingredients"],
                 "steps": h["_content"]["steps"],
                 "order_notes": h["_content"]["notes"],
+                "order_rules": structure_notes(h["_content"]["notes"], h["_content"]["ingredients"]),
                 "change": {
                     "history_row": h["history_row"],
                     "ingredient_changes": ingredient_changes(history[n - 1]["_content"], h["_content"]) if n else None,
@@ -237,6 +312,12 @@ def build():
             "order_notes": "해당 메뉴 쪽의 '주문·제조 확인사항' 원문. HOT·ICED 공통 문장일 수 있음",
             "change": "history_row는 메뉴 쪽 '판본 이력' 표의 해당 판본 행 원문, ingredient_changes는 직전 메뉴 판본 대비 자동 비교(첫 판본은 null)",
             "aliases": "원문에 별칭 근거가 있는 경우만 기록",
+            "order_rules": "order_notes를 문장 단위로 나눠 분류. options·pumps는 원문에 적힌 값만(set.amount는 그 옵션일 때의 재료량), "
+                           "constraints는 미지원·금지·기준 없음, info는 그 밖의 안내. 얼음 옵션은 얼음이 있는 온도에만 붙인다",
+            "common_rules.options": "메뉴별 order_rules에 같은 옵션이 있으면 메뉴별 값이 우선",
+            "pumps": "원문에 펌프 횟수가 적힌 경우만. 1회 5 mL(공통 규칙 03)로 다른 값을 계산해 채우지 않는다",
+            "exposure": "답변에 쓰려면 sources[].version_id가 질의의 allowed_versions에 있고 effective_from ≤ as_of < effective_until이어야 한다. "
+                        "파일에 있다는 것만으로 배포된 판본이 아니다(v1.1은 staged)",
         },
         "source_documents": sources,
         "common_rules": rules,
@@ -249,9 +330,8 @@ def build():
             "wrap_joins": sorted({(j["at"], j["joined_with_space"]) for j in WRAP_JOINS}),
             "wrap_joins_note": "PDF 줄바꿈을 이어 붙인 자리. 띄어쓰기 여부는 SPACE_AT_WRAP 검수 목록으로 결정",
             "open_questions": [
-                "최종 컬럼·파일 형식은 C의 RDB 스키마 확정 후 맞춘다",
-                "v1.1은 staged(미배포) 판본이다. RDB 적재 시 배포 전 노출 방지는 서버 상태로 처리해야 한다",
-                "펌프 환산(1회 5 mL)은 공통 규칙 03에 근거가 있으나 구조화 필드로 만들지 않고 원문 문장으로만 둔다",
+                "MVP는 RAG 내부 조회용(B). RDB 적재는 E2E 이후 확장에서 C와 형식 확정",
+                "메뉴·옵션 해석(질문 → menu_id·temperature·옵션 이름)은 B 몫. 이 파일은 해석 결과로 값을 고르는 기준만 제공",
             ],
         },
     }
@@ -285,12 +365,26 @@ def check(data):
                 checked += 1
                 if re.sub(r"\s+", "", item["text"]) not in t:
                     errors.append(f"{r['recipe_version_id']}: 문장 불일치 '{item['text'][:30]}' @p{src['page']}")
+        rules = r["order_rules"]
+        for item in rules["options"] + rules["pumps"]:
+            checked += 1
+            v = item.get("set", item)
+            if item["text"] not in " ".join(r["order_notes"]) or f"{v['amount']} {v['unit']}" not in item["text"]:
+                errors.append(f"{r['recipe_version_id']}: 옵션 근거 불일치 {item}")
+            if v["ingredient"] not in {i["name"] for i in r["ingredients"]}:
+                errors.append(f"{r['recipe_version_id']}: 옵션 재료가 재료표에 없음 {v['ingredient']}")
     rs = data["common_rules"]
     t = page_text(rs["source"])
     for rule in rs["rules"]:
         checked += 1
         if re.sub(r"\s+", "", rule["no"] + rule["text"]) not in t:
             errors.append(f"공통 규칙 {rule['no']} 불일치")
+        if COMMON_RULE_KIND[rule["no"]][1] not in rule["text"]:
+            errors.append(f"공통 규칙 {rule['no']} 종류 키워드 불일치")
+    for o in rs["options"]:
+        checked += 1
+        if re.sub(r"\s+", "", o["text"]) not in t:
+            errors.append(f"공통 옵션 근거 불일치 {o['name']}")
     return checked, errors
 
 
