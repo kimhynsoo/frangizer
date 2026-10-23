@@ -1,0 +1,17 @@
+.env
+**/.env
+!.env.example
+!**/.env.example
+.venv/
+**/__pycache__/
+*.pyc
+node_modules/
+dist/
+build/
+.gradle/
+bin/
+faiss_db/
+*.faiss
+index.pkl
+**/uploads/
+.DS_Store
