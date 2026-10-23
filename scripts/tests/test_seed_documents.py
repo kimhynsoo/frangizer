@@ -132,14 +132,30 @@ def run(backend, *extra, password="pw", monkeypatch=None):
     return seed.main(["--apply", "--base-url", backend.url, "--poll-interval", "0", *extra])
 
 
+def publishes(backend):
+    return [p for m, p in backend.calls if p.endswith("/publish")]
+
+
 def test_dry_run_sends_nothing(capsys):
     assert seed.main(["--base-url", "http://127.0.0.1:9/api/v1"]) == 0  # 닫힌 포트: 요청하면 실패했을 것
     out = capsys.readouterr().out
     assert "미리보기" in out and "staged" in out and "demo-cafe-recipes-1.1" in out
 
 
-def test_apply_seeds_source_and_skips_staged_and_optional(backend, monkeypatch):
+def test_default_stops_before_publish(backend, monkeypatch):
     assert run(backend, monkeypatch=monkeypatch) == 0
+    assert publishes(backend) == []  # 배포하면 공지가 생기므로 기본은 하지 않는다
+    assert all((v["lifecycle"], v["index_status"]) == ("approved", "ready") for v in backend.versions.values())
+
+
+def test_publish_only_selected(backend, monkeypatch):
+    run(backend, monkeypatch=monkeypatch)
+    assert run(backend, "--publish", "--only", "demo-cafe-recipes", monkeypatch=monkeypatch) == 0
+    assert publishes(backend) == ["/api/v1/documents/demo-cafe-recipes/versions/demo-cafe-recipes-1.0/publish"]
+
+
+def test_apply_seeds_source_and_skips_staged_and_optional(backend, monkeypatch):
+    assert run(backend, "--publish", monkeypatch=monkeypatch) == 0
     expected = {d["server"]["version_id"] for d in DEFAULT}
     assert {v for (_, v) in backend.versions} == expected
     assert all(v["lifecycle"] == "published" for v in backend.versions.values())
@@ -152,18 +168,18 @@ def test_apply_seeds_source_and_skips_staged_and_optional(backend, monkeypatch):
 
 
 def test_rerun_changes_nothing(backend, monkeypatch, capsys):
-    run(backend, monkeypatch=monkeypatch)
+    run(backend, "--publish", monkeypatch=monkeypatch)
     posts_before = sum(1 for m, _ in backend.calls if m == "POST")
-    assert run(backend, monkeypatch=monkeypatch) == 0
+    assert run(backend, "--publish", monkeypatch=monkeypatch) == 0
     posts_after = sum(1 for m, _ in backend.calls if m == "POST")
     assert posts_after - posts_before == 1  # 로그인만
     assert capsys.readouterr().out.count("이미 완료") == len(DEFAULT)
 
 
 def test_resumes_after_interruption(backend, monkeypatch):
-    run(backend, "--no-publish", monkeypatch=monkeypatch)
+    run(backend, monkeypatch=monkeypatch)
     assert all(v["lifecycle"] == "approved" for v in backend.versions.values())
-    assert run(backend, monkeypatch=monkeypatch) == 0
+    assert run(backend, "--publish", monkeypatch=monkeypatch) == 0
     assert all(v["lifecycle"] == "published" for v in backend.versions.values())
     assert sum(1 for m, p in backend.calls if p == "/api/v1/documents") == len(DEFAULT)  # 다시 올리지 않음
 
@@ -190,7 +206,7 @@ def test_stops_when_server_has_different_file(backend, monkeypatch, capsys):
 
 def test_index_failure_is_reported_and_others_continue(backend, monkeypatch, capsys):
     backend.fail_index_for = {"consumer-basic-act-2026-09-11"}
-    assert run(backend, "--only", "consumer-basic-act", "--only", "franchise-act", monkeypatch=monkeypatch) == 1
+    assert run(backend, "--publish", "--only", "consumer-basic-act", "--only", "franchise-act", monkeypatch=monkeypatch) == 1
     out = capsys.readouterr().out
     assert "색인 실패" in out and "완료 1건, 실패 1건" in out
     assert backend.versions[("franchise-act", "franchise-act-2026-10-02")]["lifecycle"] == "published"

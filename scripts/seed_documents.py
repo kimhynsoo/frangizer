@@ -1,13 +1,18 @@
-"""data/manifest.json의 원본 자료를 백엔드에 등록 → 승인(색인) → 배포한다.
+"""data/manifest.json의 원본 자료를 백엔드에 등록 → 승인(색인)한다. 배포는 --publish일 때만.
 
   # 미리보기(기본): 서버에 아무것도 보내지 않는다
   python3 scripts/seed_documents.py
 
-  # 실제 등록
+  # 실제 등록: 승인·색인까지
   SEED_HQ_PASSWORD=... python3 scripts/seed_documents.py --apply [--base-url http://localhost:8080/api/v1]
+
+  # 배포까지 (판본마다 점포 공지가 생긴다)
+  SEED_HQ_PASSWORD=... python3 scripts/seed_documents.py --apply --publish [--only LOCAL_KEY ...]
 
 - 대상: repo_status=source인 문서. data/staged/(레시피 v1.1)는 시연에서 직접 올리므로 넣지 않는다.
 - 합성 가맹계약서처럼 선택 자료(OPTIONAL)는 --include-optional을 줄 때만 넣는다.
+- 배포하면 백엔드가 판본마다 공지를 만든다(공지 없는 배포는 없음, C 2026-10-23). 그래서 기본은
+  approved+ready까지만 하고, 배포는 --publish로 고른 문서만 한다. 배포 전에는 검색 근거가 아니다.
 - 다시 실행해도 된다. 서버 상태를 먼저 보고, 배포된 판본은 건너뛰고 끊긴 단계부터 잇는다.
   멱등 키는 판본·파일 해시로 고정해서 같은 요청이 두 번 처리되지 않는다.
 - 서버에 같은 판본이 다른 파일로 있거나, 서버가 준 ID가 합의 규칙(manifest server)과 다르면 멈춘다.
@@ -150,8 +155,8 @@ def wait_ready(api, doc_id, ver_id, job_id, timeout, interval):
         time.sleep(interval)
 
 
-def seed_one(api, doc, *, publish=True, timeout=600, interval=2.0):
-    """한 판본을 끝 상태(published, --no-publish면 approved+ready)까지 진행. 한 일 목록을 돌려준다."""
+def seed_one(api, doc, *, publish=False, timeout=600, interval=2.0):
+    """한 판본을 approved+ready(publish=True면 published)까지 진행. 한 일 목록을 돌려준다."""
     path, sha = check_local(doc)
     server, meta = doc["server"], doc["upload_metadata"]
     doc_id, ver_id = server["document_id"], server["version_id"]
@@ -199,7 +204,7 @@ def main(argv=None):
     ap.add_argument("--username", default=os.environ.get("SEED_HQ_USERNAME", "demo-hq-01"))
     ap.add_argument("--only", action="append", help="local_key로 일부만")
     ap.add_argument("--include-optional", action="store_true", help=f"선택 자료 포함: {', '.join(sorted(OPTIONAL))}")
-    ap.add_argument("--no-publish", action="store_true", help="승인·색인까지만 하고 배포·공지는 하지 않는다")
+    ap.add_argument("--publish", action="store_true", help="배포까지 한다. 판본마다 점포 공지가 생긴다")
     ap.add_argument("--timeout", type=float, default=600, help="판본당 색인 대기 초")
     ap.add_argument("--poll-interval", type=float, default=2.0)
     args = ap.parse_args(argv)
@@ -214,7 +219,7 @@ def main(argv=None):
         print(f"  제외  {d['server']['version_id']:<45} {why}")
     if not args.apply:
         for d in todo:
-            print(f"  예정  {d['server']['version_id']:<45} 등록 → 승인·색인" + ("" if args.no_publish else " → 배포"))
+            print(f"  예정  {d['server']['version_id']:<45} 등록 → 승인·색인" + (" → 배포(공지 생성)" if args.publish else ""))
         print("서버에 보내지 않았다. 실제 등록은 --apply")
         return 0
 
@@ -233,7 +238,7 @@ def main(argv=None):
     for d in todo:
         vid = d["server"]["version_id"]
         try:
-            done = seed_one(api, d, publish=not args.no_publish, timeout=args.timeout, interval=args.poll_interval)
+            done = seed_one(api, d, publish=args.publish, timeout=args.timeout, interval=args.poll_interval)
             print(f"  완료  {vid:<45} {' → '.join(done)}")
         except SeedError as e:
             failed += 1
