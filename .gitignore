@@ -42,3 +42,26 @@ bin/
 
 # 도구 작업 폴더 (C 요청)
 .omc
+.DS_Store
+.omc/
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+.demo/
+node_modules/
+build/
+dist/
+*.faiss
+*.pkl
+uploads/
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+var/
+.gradle/
