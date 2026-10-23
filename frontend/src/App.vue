@@ -123,7 +123,11 @@ onUnmounted(() => window.removeEventListener("session-expired", expired));
           class="nav-link"
           ><component :is="link.icon" :size="19" /><span>{{ link.label }}</span
           ><span
-            v-if="link.path === '/notices' && notices.unread"
+            v-if="
+              auth.user?.role === 'owner' &&
+              link.path === '/notices' &&
+              notices.unread
+            "
             class="nav-count"
             >{{ notices.unread }}</span
           ></RouterLink

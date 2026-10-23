@@ -18,6 +18,43 @@ npm run dev
 합성 계정은 `demo-owner-a001`, `demo-prospect`, `demo-hq`이며 시연 비밀번호는
 API 예시의 `demo-password`다. 실제 계정 자격 증명이 아니다.
 
+## 팀원끼리 같은 화면으로 확인하기
+
+최신 프론트 변경이 병합된 `main`과 같은 로그인 역할을 사용한다. `git fetch`만으로는 실행 중인 파일이 갱신되지 않는다.
+
+### 로컬 개발 서버
+
+```sh
+git switch main
+git pull --ff-only origin main
+cd frontend
+npm ci
+npm run dev
+```
+
+기존 개발 서버는 종료하고 다시 실행한다. 브라우저 주소는 터미널에 표시된 현재 서버 주소를 사용한다.
+
+### 이미 실행 중인 Docker 웹
+
+저장소 루트에서 최신 `main`을 받은 뒤 웹 이미지를 다시 빌드한다. 실행 중인 컨테이너에 `git pull`만 해서는 새 화면이 반영되지 않는다.
+
+```sh
+git switch main
+git pull --ff-only origin main
+docker compose build web
+docker compose up -d --no-deps web
+```
+
+이 명령은 DB·백엔드·RAG가 이미 실행 중인 환경의 웹 갱신용이다. 최초 전체 실행은 루트 README를 따른다.
+
+### 모드·계정 확인
+
+- `npm run dev`의 기본은 샘플 모드이며, Docker 웹의 기본 빌드는 실제 API 모드다. UI 코드가 같아도 문서·공지·답변 데이터는 다를 수 있다.
+- 샘플 모드를 함께 확인하려면 `frontend/.env.local`의 `VITE_USE_MOCK=true`를 사용하고 개발 서버를 다시 시작한다. 실제 연동을 확인할 때는 아래 실제 서버 연결 설정을 따른다.
+- 샘플 계정: `demo-prospect`, `demo-owner-a001`, `demo-hq`. 실제 API의 시드 계정: `demo-prospect-01`, `demo-owner-a001`, `demo-hq-01`이며 비밀번호는 서버 담당자가 설정한 `DEMO_PASSWORD` 값이다.
+- 비교할 때 같은 역할·브랜드·점포로 로그인한다. FAQ는 예비 점주 전용, 읽기 기능·미확인 숫자는 역할에 따라 다르게 표시된다.
+- 변경 후에도 이전 화면이면 실행 중인 서버 폴더·브랜치·접속 주소를 확인하고 브라우저를 강력 새로고침한다.
+
 ## 실제 서버 연결
 
 `frontend/.env.local`을 만들고 다음 값을 설정한 뒤 개발 서버를 재시작한다.
