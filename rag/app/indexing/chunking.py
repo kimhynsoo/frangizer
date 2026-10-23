@@ -40,6 +40,7 @@ class Chunk:
     parts: int = 1                      # 같은 섹션을 나눈 조각 수 (part는 1부터)
     parent_section_key: str = ""        # 나누기 전 섹션 키. 나머지 조각을 모아 원문 섹션을 복원할 때 쓴다
     pages: tuple = ()                   # 섹션이 걸친 PDF 쪽(시작 쪽 포함)
+    legal_reviewed: bool = False        # 조문 단위 시점 검수 통과(legal_reviews.json)
 
 
 def _split_long(lines, heading, max_chars, boundary=None):
