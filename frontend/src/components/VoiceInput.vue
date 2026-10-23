@@ -20,6 +20,7 @@ import {
   speakLocally,
 } from "../api/voice";
 const props = defineProps({
+  inputId: { type: String, default: "question-input" },
   disabled: Boolean,
   readingAnswer: Boolean,
   allowReadAloud: { type: Boolean, default: true },
@@ -191,7 +192,7 @@ function confirm() {
 }
 function edit() {
   cancel();
-  document.getElementById("question-input")?.focus();
+  document.getElementById(props.inputId)?.focus();
 }
 function demo() {
   cancel();
@@ -244,9 +245,9 @@ onUnmounted(() => {
     aria-label="질문 작성"
     @submit.prevent="submit"
   >
-    <label class="sr-only" for="question-input">질문 입력</label>
+    <label class="sr-only" :for="inputId">질문 입력</label>
     <textarea
-      id="question-input"
+      :id="inputId"
       v-model="transcript"
       maxlength="2000"
       placeholder="질문을 입력하거나 마이크를 눌러 말해 주세요."
