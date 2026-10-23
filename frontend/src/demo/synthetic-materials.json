@@ -1,0 +1,139 @@
+{
+  "reviewed_on": "2026-10-23",
+  "note": "manifest.json과 실제 PDF를 대조한 프론트 시연 스냅샷. source/staged는 승인·배포 상태가 아니다. v1.0 종료일은 10월 25일 포함으로 읽고 시연의 종료 시각을 26일 0시 미포함으로 명시했다. 일반 서버 변환 규칙을 정의하지 않는다.",
+  "recipes": [
+    {
+      "source_file": "data/source/합성_카페_레시피_v1.0.pdf",
+      "repository_status": "source",
+      "effective_until": "2026-10-26T00:00:00+09:00",
+      "document": {
+        "document_id": "demo-cafe-recipes",
+        "version_id": "demo-cafe-recipes-1.0",
+        "brand_id": "brand-demo-a",
+        "title": "카페 표준 레시피 북 (합성)",
+        "version": "1.0",
+        "category": "recipe",
+        "material_type": "synthetic",
+        "is_demo": true,
+        "visibility": "owner",
+        "effective_from": "2026-10-01T00:00:00+09:00",
+        "lifecycle": "published",
+        "index_status": "ready",
+        "created_at": "2026-10-23T10:00:00+09:00",
+        "approved_at": "2026-10-23T10:00:00+09:00",
+        "published_at": "2026-10-23T10:00:00+09:00",
+        "change_summary": "최초 시연 기준 · 바닐라 시럽 20 mL",
+        "original_source": {
+          "title": "카페 표준 레시피 북 (합성)",
+          "url": null,
+          "edition": "1.0",
+          "publisher": "frangizer 팀(합성)",
+          "acquired_on": "2026-10-23",
+          "note": "v1.0·v1.1 합본에서 v1.0 쪽만 분리. page는 이 파일 기준 쪽 번호를 쓴다. 쪽 하단에 인쇄된 번호는 합본 기준이라 다를 수 있으므로 original_pages로 대응시켜 출처 설명에서 구분한다 실제 브랜드 제조법이 아닌 합성·시연 자료. 승인·배포 상태는 별도의 시연 설정이다."
+        },
+        "indexing_policy": {
+          "exclude_pages": [],
+          "legal_temporal_reviewed": false
+        },
+        "file_name": "합성_카페_레시피_v1.0.pdf",
+        "media_type": "application/pdf",
+        "file_size_bytes": 1794238,
+        "sha256": "f790b8f75ef280a2ca71f43492368583d3c175a4f89c9f511982a37e76b9c148",
+        "page_count": 8,
+        "file_url": "/api/v1/documents/demo-cafe-recipes/versions/demo-cafe-recipes-1.0/file",
+        "index_revision": "demo-index-1.0"
+      },
+      "sections": [
+        {
+          "chunk_id": "demo-recipes-1.0-p2",
+          "page": 2,
+          "article": null,
+          "heading": "공통 계량과 주문 옵션 · 파일 2쪽 / 인쇄 2쪽",
+          "text": "CAFE OPERATIONS / SYNTHETIC DEMO   demo-cafe-recipes / 공통 규칙 (v1.0·v1.1 공통)\n공통 계량과 주문 옵션\n01  이 문서는 1잔 기준이다. HOT 컵은 350 mL, ICED 컵은 500 mL로 정한다. 컵 용량은 재료를 가득 채우라는 의\n미가 아니다.\n02  에스프레소 1샷은 추출액 30 mL, 2샷은 60 mL다. 원두 투입량·추출 시간은 이 문서에서 정하지 않는다.\n03  바닐라 시럽의 전용 펌프 1회는 5 mL다. 초콜릿 소스·딸기 베이스·자몽 베이스·말차 파우더에는 이 펌프 환산을\n적용하지 않는다.\n04  별도 주문 옵션이 없으면 메뉴별 기본 계량을 따른다. 시럽은 mL, 파우더·소스·베이스·얼음은 g 단위를 확인한\n다.\n05  얼음 적게는 기본 얼음 무게의 절반이다. 얼음을 줄여도 우유·물·시럽·샷을 늘려 컵을 채우지 않는다. 얼음 없음\n은 얼음만 0 g으로 한다.\n06  샷 추가 1회는 에스프레소 30 mL를 더한다. 샷 추가로 다른 재료량을 임의로 줄이지 않는다. 결제·가격은 이 문\n서의 범위 밖이다.\n07  바닐라라테의 덜 달게 옵션은 해당 판본 기본 시럽량에서 5 mL를 뺀다. 바닐라 시럽 빼기는 0 mL다. 다른 메뉴의\n당도 조절은 별도 기준이 없어 확인이 필요하다.\n08  우유 메뉴의 기본 우유는 일반 우유다. 대체유·디카페인·재료 품절 대체는 승인 기준이 없으므로 임의로 적용하\n지 않고 담당자에게 확인한다.\n09  알레르기 무해·무카페인·식품 안전을 보장하지 않는다. 제품 원재료 표시, 교차접촉 관리와 현장 상태는 별도 확\n인 대상이다.\n10  이 문서에는 보관 온도·개봉 후 사용기한·환불 정책이 없다. 다른 메뉴의 기준이나 상식으로 수치·정책을 만들어\n답하지 않는다.\n11  이 문서에 없는 메뉴(시즌 메뉴·신메뉴 포함)는 승인된 제조 기준이 없다. 기존 메뉴의 비율을 대입해 답하지 않\n고, 등록된 문서가 없다고 안내한다.\n12  판본은 질문 시점의 적용일로 고른다. 적용일 전의 판본은 '예정'으로 구분해 안내하고 현재 기준처럼 답하지 않는\n다. 판본 사이에 값이 바뀐 메뉴는 변경 전후를 함께 보여준다.\n메뉴별 본문과 이 공통 규칙을 함께 검색한다. 숫자가 없는 항목에 임의의 수치를 보충하지 않는다.\n합성 · 시연용  | 실제  브랜드  레시피 · 규정이  아닙니다 2",
+          "effective_from": "2026-10-01T00:00:00+09:00",
+          "effective_until": "2026-10-26T00:00:00+09:00"
+        },
+        {
+          "chunk_id": "demo-recipes-1.0-p5",
+          "page": 5,
+          "article": null,
+          "heading": "바닐라라테 HOT·ICED · 파일 5쪽 / 인쇄 6쪽",
+          "text": "CAFE OPERATIONS / SYNTHETIC DEMO   demo-cafe-recipes / 바닐라라테 v1.0 (적용 2026-10-01 ~ 2026-10-25)\n바닐라라테 (v1.0, 적용 중)\n메뉴 ID vanilla_latte / 1잔 기준 / 판본 (v1.0, 적용 중) / 적용 2026-10-01 ~ 2026-10-25 / 적용 중 판본 (2026-10-26부터 v1.1로 대\n체)\nHOT\n재료 계량 단위\n에스프레소 60 mL\n바닐라 시럽 20 mL\n우유 210 mL\n1. HOT 컵에 바닐라 시럽 20 mL와 에스프레소 60 mL를 넣어 섞는다.\n2. 계량한 우유 210 mL를 스팀하고 컵에 붓는다.\nICED\n재료 계량 단위\n에스프레소 60 mL\n바닐라 시럽 20 mL\n우유 170 mL\n얼음 180 g\n1. 바닐라 시럽 20 mL와 에스프레소 60 mL를 별도 용기에서 섞는다.\n2. ICED 컵에 우유 170 mL와 얼음 180 g을 넣는다.\n3. 시럽과 에스프레소 혼합액을 붓는다.\n주문·제조 확인사항\nv1.0의 기본 시럽 20 mL는 전용 펌프 4회다. HOT과 ICED에 동일하게 적용한다.\nv1.0의 덜 달게는 시럽 15 mL, 전용 펌프 3회다. 시럽 빼기는 0 mL다.\n2026-10-26부터는 v1.1(앞 쪽)로 바뀌어 기본 시럽이 15 mL가 된다.\n이 메뉴의 판본 이력\n판본 적용 내용\nv1.0 2026-10-01 ~ 2026-10-\n25 기본 시럽 20 mL(펌프 4회), 덜 달게 15 mL(펌프 3회)\nv1.1 2026-10-26 ~ 기본 시럽 15 mL(펌프 3회), 덜 달게 10 mL(펌프 2회). 우유·샷·얼음은 변경 없\n음\n합성 · 시연용  | 실제  브랜드  레시피 · 규정이  아닙니다 6",
+          "effective_from": "2026-10-01T00:00:00+09:00",
+          "effective_until": "2026-10-26T00:00:00+09:00"
+        }
+      ]
+    },
+    {
+      "source_file": "data/staged/합성_카페_레시피_v1.1.pdf",
+      "repository_status": "staged",
+      "effective_until": null,
+      "document": {
+        "document_id": "demo-cafe-recipes",
+        "version_id": "demo-cafe-recipes-1.1",
+        "brand_id": "brand-demo-a",
+        "title": "카페 표준 레시피 북 (합성)",
+        "version": "1.1",
+        "category": "recipe",
+        "material_type": "synthetic",
+        "is_demo": true,
+        "visibility": "owner",
+        "effective_from": "2026-10-26T00:00:00+09:00",
+        "lifecycle": "draft",
+        "index_status": "not_started",
+        "created_at": "2026-10-23T10:00:00+09:00",
+        "approved_at": null,
+        "published_at": null,
+        "change_summary": "바닐라 시럽 20→15 mL 변경 및 허니자몽블랙티 추가",
+        "original_source": {
+          "title": "카페 표준 레시피 북 (합성)",
+          "url": null,
+          "edition": "1.1",
+          "publisher": "frangizer 팀(합성)",
+          "acquired_on": "2026-10-23",
+          "note": "배포 시연용 미배포 판본 — 자동 적재 금지, 시연에서 업로드·승인·배포로만 반영. 바닐라라테 시럽 20→15 mL, 허니자몽블랙티 신규, 10쪽(파일 기준)은 변경 공지 NT-2026-001 실제 브랜드 제조법이 아닌 합성·시연 자료. 승인·배포 상태는 별도의 시연 설정이다."
+        },
+        "indexing_policy": {
+          "exclude_pages": [],
+          "legal_temporal_reviewed": false
+        },
+        "file_name": "합성_카페_레시피_v1.1.pdf",
+        "media_type": "application/pdf",
+        "file_size_bytes": 2241248,
+        "sha256": "42bf2bb0645cb2cdc6dcbec32865f18be30e8f92947ebd416ea3f0709bda7051",
+        "page_count": 10,
+        "file_url": "/api/v1/documents/demo-cafe-recipes/versions/demo-cafe-recipes-1.1/file",
+        "index_revision": null
+      },
+      "sections": [
+        {
+          "chunk_id": "demo-recipes-1.1-p2",
+          "page": 2,
+          "article": null,
+          "heading": "공통 계량과 주문 옵션 · 파일 2쪽 / 인쇄 2쪽",
+          "text": "CAFE OPERATIONS / SYNTHETIC DEMO   demo-cafe-recipes / 공통 규칙 (v1.0·v1.1 공통)\n공통 계량과 주문 옵션\n01  이 문서는 1잔 기준이다. HOT 컵은 350 mL, ICED 컵은 500 mL로 정한다. 컵 용량은 재료를 가득 채우라는 의\n미가 아니다.\n02  에스프레소 1샷은 추출액 30 mL, 2샷은 60 mL다. 원두 투입량·추출 시간은 이 문서에서 정하지 않는다.\n03  바닐라 시럽의 전용 펌프 1회는 5 mL다. 초콜릿 소스·딸기 베이스·자몽 베이스·말차 파우더에는 이 펌프 환산을\n적용하지 않는다.\n04  별도 주문 옵션이 없으면 메뉴별 기본 계량을 따른다. 시럽은 mL, 파우더·소스·베이스·얼음은 g 단위를 확인한\n다.\n05  얼음 적게는 기본 얼음 무게의 절반이다. 얼음을 줄여도 우유·물·시럽·샷을 늘려 컵을 채우지 않는다. 얼음 없음\n은 얼음만 0 g으로 한다.\n06  샷 추가 1회는 에스프레소 30 mL를 더한다. 샷 추가로 다른 재료량을 임의로 줄이지 않는다. 결제·가격은 이 문\n서의 범위 밖이다.\n07  바닐라라테의 덜 달게 옵션은 해당 판본 기본 시럽량에서 5 mL를 뺀다. 바닐라 시럽 빼기는 0 mL다. 다른 메뉴의\n당도 조절은 별도 기준이 없어 확인이 필요하다.\n08  우유 메뉴의 기본 우유는 일반 우유다. 대체유·디카페인·재료 품절 대체는 승인 기준이 없으므로 임의로 적용하\n지 않고 담당자에게 확인한다.\n09  알레르기 무해·무카페인·식품 안전을 보장하지 않는다. 제품 원재료 표시, 교차접촉 관리와 현장 상태는 별도 확\n인 대상이다.\n10  이 문서에는 보관 온도·개봉 후 사용기한·환불 정책이 없다. 다른 메뉴의 기준이나 상식으로 수치·정책을 만들어\n답하지 않는다.\n11  이 문서에 없는 메뉴(시즌 메뉴·신메뉴 포함)는 승인된 제조 기준이 없다. 기존 메뉴의 비율을 대입해 답하지 않\n고, 등록된 문서가 없다고 안내한다.\n12  판본은 질문 시점의 적용일로 고른다. 적용일 전의 판본은 '예정'으로 구분해 안내하고 현재 기준처럼 답하지 않는\n다. 판본 사이에 값이 바뀐 메뉴는 변경 전후를 함께 보여준다.\n메뉴별 본문과 이 공통 규칙을 함께 검색한다. 숫자가 없는 항목에 임의의 수치를 보충하지 않는다.\n합성 · 시연용  | 실제  브랜드  레시피 · 규정이  아닙니다 2",
+          "effective_from": "2026-10-26T00:00:00+09:00",
+          "effective_until": null
+        },
+        {
+          "chunk_id": "demo-recipes-1.1-p5",
+          "page": 5,
+          "article": null,
+          "heading": "바닐라라테 HOT·ICED · 파일 5쪽 / 인쇄 5쪽",
+          "text": "CAFE OPERATIONS / SYNTHETIC DEMO   demo-cafe-recipes / 바닐라라테 v1.1 (적용 예정 2026-10-26)\n바닐라라테 (v1.1, 적용 예정)\n메뉴 ID vanilla_latte / 1잔 기준 / 판본 (v1.1, 적용 예정) / 적용 2026-10-26 ~ / 적용 예정 판본 (2026-10-26 전에는 v1.0 사용)\nHOT\n재료 계량 단위\n에스프레소 60 mL\n바닐라 시럽 15 mL\n우유 210 mL\n1. HOT 컵에 바닐라 시럽 15 mL와 에스프레소 60 mL를 넣어 섞는다.\n2. 계량한 우유 210 mL를 스팀하고 컵에 붓는다.\nICED\n재료 계량 단위\n에스프레소 60 mL\n바닐라 시럽 15 mL\n우유 170 mL\n얼음 180 g\n1. 바닐라 시럽 15 mL와 에스프레소 60 mL를 별도 용기에서 섞는다.\n2. ICED 컵에 우유 170 mL와 얼음 180 g을 넣는다.\n3. 시럽과 에스프레소 혼합액을 붓는다.\n주문·제조 확인사항\nv1.1의 기본 시럽 15 mL는 전용 펌프 3회다. HOT과 ICED에 동일하게 적용한다.\nv1.1의 덜 달게는 시럽 10 mL, 전용 펌프 2회다. 시럽 빼기는 0 mL다.\nv1.0 대비 시럽이 5 mL 줄었다. 우유·샷·얼음량은 v1.0과 동일하며, 줄어든 시럽량을 다른 재료로 보충하지 않는\n다.\n2026-10-26 0시 전에는 이 판본이 아니라 v1.0(다음 쪽)을 기준으로 한다.\n이 메뉴의 판본 이력\n판본 적용 내용\nv1.0 2026-10-01 ~ 2026-10-\n25 기본 시럽 20 mL(펌프 4회), 덜 달게 15 mL(펌프 3회)\nv1.1 2026-10-26 ~ 기본 시럽 15 mL(펌프 3회), 덜 달게 10 mL(펌프 2회). 우유·샷·얼음은 변경 없\n음\n합성 · 시연용  | 실제  브랜드  레시피 · 규정이  아닙니다 5",
+          "effective_from": "2026-10-26T00:00:00+09:00",
+          "effective_until": null
+        },
+        {
+          "chunk_id": "demo-recipes-1.1-p9",
+          "page": 9,
+          "article": null,
+          "heading": "허니자몽블랙티 ICED · 파일 9쪽 / 인쇄 10쪽",
+          "text": "CAFE OPERATIONS / SYNTHETIC DEMO   demo-cafe-recipes / 허니자몽블랙티 (신규 2026-10-26)\n허니자몽블랙티\n메뉴 ID honey_grapefruit_tea / 1잔 기준 / 판본 v1.1 / 적용 2026-10-26 ~ (신규) / 적용 예정 판본 (2026-10-26 전에는 등록되지 않\n은 메뉴)\nICED\n재료 계량 단위\n미리 준비한 홍차 150 mL\n자몽 베이스 60 g\n꿀 10 g\n얼음 160 g\n1. 별도 용기에서 홍차 150 mL, 자몽 베이스 60 g, 꿀 10 g을 섞는다.\n2. ICED 컵에 얼음 160 g을 넣는다.\n3. 홍차 혼합액을 붓는다.\n주문·제조 확인사항\nv1.1에서 추가되는 ICED 전용 가상 신메뉴다. 2026-10-26 전에는 승인된 제조 기준이 없다.\n홍차 우림 조건·원재료 보관 조건은 이 문서에서 정하지 않는다.\n얼음 적게는 80 g이며 나머지 재료량은 동일하다.\n이 메뉴의 판본 이력\n판본 적용 내용\nv1.0 - 등록되지 않음\nv1.1 2026-10-26 신규 등록 (ICED 전용)\n합성 · 시연용  | 실제  브랜드  레시피 · 규정이  아닙니다 10",
+          "effective_from": "2026-10-26T00:00:00+09:00",
+          "effective_until": null
+        }
+      ]
+    }
+  ]
+}
