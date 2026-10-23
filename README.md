@@ -189,7 +189,7 @@ frangizer/
 ├── frontend/    Vue.js
 ├── backend/     Java 인증·업무 API
 ├── rag/         FastAPI RAG + 색인
-├── voice/       FastAPI STT (선택)
+├── voice/       FastAPI STT (Whisper)
 ├── nginx/       리버스 프록시
 ├── data/        RAG 적재 원본 자료
 ├── eval/        평가셋·결과 (색인 제외)
@@ -212,9 +212,9 @@ cp .env.example .env
 
 | 변수 | 사용처 | 설명 |
 | --- | --- | --- |
-| `JWT_SECRET` | backend, rag, voice | JWT 서명키. **32바이트 이상**, 세 서비스가 같은 값 사용 |
-| `JWT_ISSUER`, `JWT_AUDIENCE` | backend, rag, voice | 기본 `frangizer`, `frangizer-api` |
-| `INTERNAL_TOKEN` | backend, rag | 서비스 간 호출용 비밀 (`X-Internal-Token`) |
+| `JWT_SECRET` | backend, rag | JWT 서명키. **32바이트 이상**, 두 서비스가 같은 값 사용 |
+| `JWT_ISSUER`, `JWT_AUDIENCE` | backend, rag | 기본 `frangizer`, `frangizer-api` |
+| `INTERNAL_TOKEN` | backend, rag, voice | 서비스 간 호출용 비밀 (`X-Internal-Token`) |
 | `DB_USERNAME`, `DB_PASSWORD` | db, backend | MariaDB 앱 사용자(기본 `frangizer`)와 비밀번호. Compose가 같은 값으로 사용자를 만듭니다 |
 | `DEMO_PASSWORD` | backend | 시연 계정 비밀번호. **비어 있으면 로그인할 수 없습니다** |
 | `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL` | rag | 외부 모델 설정. 비어 있어도 서비스는 뜨지만 질문은 `503`, 색인은 `EMBEDDING_NOT_CONFIGURED`로 실패합니다. 임베딩 모델은 `text-embedding-3-small` 또는 `-large`이며, 바꾸면 전체를 다시 색인합니다 |
@@ -227,7 +227,7 @@ cp .env.example .env
 
 ### 2. 기동
 
-기본 구성은 **db + backend + rag + web**입니다.
+기본 구성은 **db + backend + rag + voice + web**입니다.
 
 ```bash
 docker compose up -d --build
@@ -235,11 +235,7 @@ docker compose up -d --build
 
 기동 순서는 `db → backend·rag → web`입니다. 서비스마다 헬스체크가 있어 앞 서비스가 준비된 뒤에 다음 서비스가 시작됩니다. 처음 빌드는 Gradle·npm·Python 의존성을 받느라 몇 분 걸립니다. `.env`에 필수 값(`DB_PASSWORD`, `JWT_SECRET`, `INTERNAL_TOKEN`, `DEMO_PASSWORD`)이 비어 있으면 컨테이너를 띄우기 전에 안내 메시지를 내고 멈춥니다.
 
-음성 서비스(STT)는 선택이며 `voice` 프로필로 추가합니다. 첫 요청 때 Whisper 모델을 내려받습니다.
-
-```bash
-docker compose --profile voice up -d --build
-```
+음성 서비스(STT)도 함께 뜹니다. 처음 시작할 때 Whisper 모델(약 460MB)을 `whisper_cache` 볼륨에 내려받아 몇 분 걸리고, 그동안 음성 질문은 `503`입니다. 이후에는 바로 준비됩니다.
 
 상태 확인:
 
@@ -317,7 +313,6 @@ docker compose down -v     # 컨테이너와 볼륨(DB, FAISS 인덱스, 업로�
 - 업로드 문서, FAISS 인덱스, 질의 결과(SQLite)는 `frangizer_data` 볼륨(`/var/lib/frangizer`)에 저장되며, backend가 저장한 문서를 rag가 같은 볼륨에서 읽어 색인합니다. 저장소에는 커밋하지 않습니다.
 - 웹 이미지는 실제 API에 연결되도록 `VITE_USE_MOCK=false`로 빌드됩니다. 프론트를 샘플 데이터로만 보려면 `frontend/`에서 개발 서버를 따로 실행합니다.
 - backend 이미지는 저장소 루트를 빌드 컨텍스트로 써서 `docs/api` 계약(Swagger)을 함께 담습니다. Swagger UI는 외부에 공개하지 않으므로 개발용 실행(5단계)에서 확인합니다.
-- `voice` 프로필은 `voice/`에 `Dockerfile`이 생긴 뒤에 사용할 수 있습니다.
 - `.env`의 비밀번호를 바꾼 뒤에는 `docker compose down -v`로 DB를 초기화해야 반영됩니다. MariaDB는 처음 만들어질 때만 사용자를 만듭니다.
 - 80번 포트가 이미 쓰이고 있으면 `.env`의 `WEB_PORT`를 바꿉니다(예: `WEB_PORT=8088` → http://localhost:8088).
 

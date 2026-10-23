@@ -42,4 +42,13 @@ class RagClientTest {
         assertThatThrownBy(() -> client.submitIndexJob(Map.of()))
                 .isInstanceOf(ApiException.class).isNotInstanceOf(RagClient.Rejected.class);
     }
+
+    @Test
+    void unreachableIsUnavailableNotTimeout() {
+        // 응답 없는 주소: 연결 시간 초과(3초)든 연결 거부든 "서비스 없음"(503)이어야 한다
+        RagClient client = new RagClient("http://10.255.255.1:9", "token");
+        assertThatThrownBy(() -> client.submitIndexJob(Map.of()))
+                .isInstanceOfSatisfying(ApiException.class, e -> org.assertj.core.api.Assertions.assertThat(e.code)
+                        .isEqualTo("SERVICE_UNAVAILABLE"));
+    }
 }

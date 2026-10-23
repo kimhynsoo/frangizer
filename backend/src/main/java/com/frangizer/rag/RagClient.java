@@ -1,6 +1,7 @@
 package com.frangizer.rag;
 
 import java.net.http.HttpClient;
+import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.function.Supplier;
@@ -98,7 +99,8 @@ public class RagClient {
             throw upstream();
         } catch (ResourceAccessException e) {
             log.warn("rag call failed: {}", e.getMessage());
-            if (e.getCause() instanceof HttpTimeoutException) throw timeout();
+            // 연결 시간 초과(HttpConnectTimeoutException)는 서비스가 없는 것이라 503
+            if (e.getCause() instanceof HttpTimeoutException && !(e.getCause() instanceof HttpConnectTimeoutException)) throw timeout();
             throw unavailable();
         } catch (RestClientException e) {
             log.warn("rag response unreadable: {}", e.getMessage()); // JSON이 아닌 200 등
