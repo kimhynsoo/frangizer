@@ -11,24 +11,27 @@
     "effective_until": "미포함(이 시각부터 적용 안 됨). null이면 종료 시점 미지정",
     "page": "PDF 파일 기준 1부터 시작. printed_page는 쪽 하단 인쇄 번호(합본 기준)",
     "order_notes": "해당 메뉴 쪽의 '주문·제조 확인사항' 원문. HOT·ICED 공통 문장일 수 있음",
+    "change": "history_row는 메뉴 쪽 '판본 이력' 표의 해당 판본 행 원문, ingredient_changes는 직전 메뉴 판본 대비 자동 비교(첫 판본은 null)",
     "aliases": "원문에 별칭 근거가 있는 경우만 기록"
   },
   "source_documents": [
     {
       "version": "1.0",
       "path": "data/source/합성_카페_레시피_v1.0.pdf",
-      "status": "source",
+      "repo_status": "source",
       "sha256": "f790b8f75ef280a2ca71f43492368583d3c175a4f89c9f511982a37e76b9c148",
       "effective_from": "2026-10-01T00:00:00+09:00",
-      "effective_until": "2026-10-26T00:00:00+09:00"
+      "effective_until": "2026-10-26T00:00:00+09:00",
+      "change_summary": "최초 등록. 메뉴 6종(v1.0), 바닐라라테 기본 시럽 20 mL"
     },
     {
       "version": "1.1",
       "path": "data/staged/합성_카페_레시피_v1.1.pdf",
-      "status": "staged",
+      "repo_status": "staged",
       "sha256": "42bf2bb0645cb2cdc6dcbec32865f18be30e8f92947ebd416ea3f0709bda7051",
       "effective_from": "2026-10-26T00:00:00+09:00",
-      "effective_until": null
+      "effective_until": null,
+      "change_summary": "바닐라 시럽 20→15 mL 변경 및 허니자몽블랙티 추가"
     }
   ],
   "common_rules": {
@@ -169,6 +172,13 @@
         "HOT과 ICED 모두 기본 2샷이다.",
         "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 물과 샷은 기본량을 유지한다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
       "sources": [
         {
           "document_version": "1.0",
@@ -230,6 +240,13 @@
         "HOT과 ICED 모두 기본 2샷이다.",
         "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 물과 샷은 기본량을 유지한다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
       "sources": [
         {
           "document_version": "1.0",
@@ -286,6 +303,13 @@
         "대체유 사용 기준은 등록되지 않았다. 일반 우유를 임의로 대체하지 않는다.",
         "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 우유와 샷은 기본량을 유지한다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
       "sources": [
         {
           "document_version": "1.0",
@@ -348,6 +372,13 @@
         "대체유 사용 기준은 등록되지 않았다. 일반 우유를 임의로 대체하지 않는다.",
         "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 우유와 샷은 기본량을 유지한다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
       "sources": [
         {
           "document_version": "1.0",
@@ -409,6 +440,13 @@
         "v1.0의 덜 달게는 시럽 15 mL, 전용 펌프 3회다. 시럽 빼기는 0 mL다.",
         "2026-10-26부터는 v1.1(앞 쪽)로 바뀌어 기본 시럽이 15 mL가 된다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01 ~ 2026-10-25",
+          "content": "기본 시럽 20 mL(펌프 4회), 덜 달게 15 mL(펌프 3회)"
+        },
+        "ingredient_changes": null
+      },
       "sources": [
         {
           "document_version": "1.0",
@@ -465,6 +503,25 @@
         "v1.0 대비 시럽이 5 mL 줄었다. 우유·샷·얼음량은 v1.0과 동일하며, 줄어든 시럽량을 다른 재료로 보충하지 않는다.",
         "2026-10-26 0시 전에는 이 판본이 아니라 v1.0(다음 쪽)을 기준으로 한다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-26 ~",
+          "content": "기본 시럽 15 mL(펌프 3회), 덜 달게 10 mL(펌프 2회). 우유·샷·얼음은 변경 없음"
+        },
+        "ingredient_changes": [
+          {
+            "name": "바닐라 시럽",
+            "before": {
+              "amount": "20",
+              "unit": "mL"
+            },
+            "after": {
+              "amount": "15",
+              "unit": "mL"
+            }
+          }
+        ]
+      },
       "sources": [
         {
           "document_version": "1.1",
@@ -530,6 +587,13 @@
         "v1.0의 덜 달게는 시럽 15 mL, 전용 펌프 3회다. 시럽 빼기는 0 mL다.",
         "2026-10-26부터는 v1.1(앞 쪽)로 바뀌어 기본 시럽이 15 mL가 된다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01 ~ 2026-10-25",
+          "content": "기본 시럽 20 mL(펌프 4회), 덜 달게 15 mL(펌프 3회)"
+        },
+        "ingredient_changes": null
+      },
       "sources": [
         {
           "document_version": "1.0",
@@ -596,6 +660,25 @@
         "v1.0 대비 시럽이 5 mL 줄었다. 우유·샷·얼음량은 v1.0과 동일하며, 줄어든 시럽량을 다른 재료로 보충하지 않는다.",
         "2026-10-26 0시 전에는 이 판본이 아니라 v1.0(다음 쪽)을 기준으로 한다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-26 ~",
+          "content": "기본 시럽 15 mL(펌프 3회), 덜 달게 10 mL(펌프 2회). 우유·샷·얼음은 변경 없음"
+        },
+        "ingredient_changes": [
+          {
+            "name": "바닐라 시럽",
+            "before": {
+              "amount": "20",
+              "unit": "mL"
+            },
+            "after": {
+              "amount": "15",
+              "unit": "mL"
+            }
+          }
+        ]
+      },
       "sources": [
         {
           "document_version": "1.1",
@@ -652,6 +735,13 @@
         "휘핑크림은 기본 구성에 없으며 임의로 추가하지 않는다.",
         "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 우유와 샷은 기본량을 유지한다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
       "sources": [
         {
           "document_version": "1.0",
@@ -724,6 +814,13 @@
         "휘핑크림은 기본 구성에 없으며 임의로 추가하지 않는다.",
         "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 우유와 샷은 기본량을 유지한다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
       "sources": [
         {
           "document_version": "1.0",
@@ -790,6 +887,13 @@
         "파우더를 우유에 바로 넣는 방식은 이 문서의 제조 순서가 아니다.",
         "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 우유와 말차 혼합액은 기본량을 유지한다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
       "sources": [
         {
           "document_version": "1.0",
@@ -862,6 +966,13 @@
         "파우더를 우유에 바로 넣는 방식은 이 문서의 제조 순서가 아니다.",
         "얼음 적게 주문은 90 g, 얼음 없음은 0 g이다. 우유와 말차 혼합액은 기본량을 유지한다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
       "sources": [
         {
           "document_version": "1.0",
@@ -928,6 +1039,13 @@
         "딸기 베이스 품절 시 생딸기·딸기잼 등으로 바꾸는 기준은 없다.",
         "얼음 적게는 75 g이며 우유는 200 mL 그대로다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-01",
+          "content": "최초 등록"
+        },
+        "ingredient_changes": null
+      },
       "sources": [
         {
           "document_version": "1.0",
@@ -999,6 +1117,13 @@
         "홍차 우림 조건·원재료 보관 조건은 이 문서에서 정하지 않는다.",
         "얼음 적게는 80 g이며 나머지 재료량은 동일하다."
       ],
+      "change": {
+        "history_row": {
+          "applied": "2026-10-26",
+          "content": "신규 등록 (ICED 전용)"
+        },
+        "ingredient_changes": null
+      },
       "sources": [
         {
           "document_version": "1.1",

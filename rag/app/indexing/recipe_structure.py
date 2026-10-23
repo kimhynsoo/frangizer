@@ -95,7 +95,26 @@ def parse_menu_page(text):
             i += 1
     j = lines.index("이 메뉴의 판본 이력")
     page["notes"] = join_wrapped(lines[lines.index("주문·제조 확인사항") + 1 : j])
+    page["history"] = parse_history(lines[j + 4 : -2])  # 머리글(판본·적용·내용) 다음부터 꼬리말 전까지
     return page
+
+
+def parse_history(lines):
+    """판본 이력 표: `v1.0 | 적용 | 내용` 행. 적용·내용 칸의 줄바꿈은 이어 붙인다."""
+    rows, cur = {}, None
+    for line in lines:
+        if re.fullmatch(r"v\d+\.\d+", line):
+            cur = rows.setdefault(line[1:], [])
+        elif cur is not None:
+            cur.append(line)
+    out = {}
+    for ver, cells in rows.items():
+        applied = cells[0]
+        rest = cells[1:]
+        if applied.endswith("-") and rest:  # `2026-10-01 ~ 2026-10-` + `25`
+            applied += rest.pop(0)
+        out[ver] = {"applied": applied, "content": "".join(rest)}
+    return out
 
 
 def parse_common_rules(text):
@@ -113,20 +132,25 @@ def parse_common_rules(text):
 
 def load_versions():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    docs = [d for d in manifest["documents"] if d["doc_id"] == DOC_ID]
-    return sorted(docs, key=lambda d: [int(x) for x in d["version"].split(".")])
+    docs = [d for d in manifest["documents"] if d["local_key"] == DOC_ID]
+    return sorted(docs, key=lambda d: [int(x) for x in d["upload_metadata"]["version"].split(".")])
 
 
-def to_ts(value, end=False):
-    """manifest 날짜를 시간대 포함 시각으로. effective_to(포함)는 다음 날 0시(미포함)로 바꾼다."""
-    if value is None:
-        return None
-    if "T" in value:
-        return value
-    if end:
-        from datetime import date, timedelta
-        value = (date.fromisoformat(value) + timedelta(days=1)).isoformat()
-    return f"{value}T00:00:00{TZ}"
+def ingredient_changes(prev, cur):
+    """직전 판본 대비 재료 변화. 값은 원문 문자열 그대로 비교한다."""
+    before = {i["name"]: i for i in prev["ingredients"]}
+    after = {i["name"]: i for i in cur["ingredients"]}
+    changes = []
+    for name in list(before) + [n for n in after if n not in before]:
+        b, a = before.get(name), after.get(name)
+        if b and a and (b["amount"], b["unit"]) == (a["amount"], a["unit"]):
+            continue
+        changes.append({
+            "name": name,
+            "before": None if not b else {"amount": b["amount"], "unit": b["unit"]},
+            "after": None if not a else {"amount": a["amount"], "unit": a["unit"]},
+        })
+    return changes
 
 
 def build():
@@ -134,18 +158,21 @@ def build():
     menus, records, rules = {}, {}, None
     sources = []
     for doc in versions:
+        meta = doc["upload_metadata"]
+        version = meta["version"]
         path = ROOT / "data" / doc["path"]
         sources.append({
-            "version": doc["version"], "path": f"data/{doc['path']}", "status": doc["status"],
+            "version": version, "path": f"data/{doc['path']}", "repo_status": doc["repo_status"],
             "sha256": sha256(path),
-            "effective_from": to_ts(doc["effective_from"]),
-            "effective_until": to_ts(doc["effective_to"], end=True),
+            "effective_from": meta["effective_from"],
+            "effective_until": doc["effective_until"],
+            "change_summary": meta["change_summary"],
         })
         pdf = pymupdf.open(path)
         original_pages = doc.get("derived_from", {}).get("original_pages")
         for idx, pg in enumerate(pdf):
             text = pg.get_text()
-            src = {"document_version": doc["version"], "path": f"data/{doc['path']}", "page": idx + 1,
+            src = {"document_version": version, "path": f"data/{doc['path']}", "page": idx + 1,
                    "printed_page": original_pages[idx] if original_pages else idx + 1}
             if rules is None and "공통 계량과 주문 옵션" in text:
                 rules = {"rules": parse_common_rules(text.split("공통 계량과 주문 옵션", 1)[1].split("메뉴별 본문과", 1)[0]),
@@ -159,11 +186,12 @@ def build():
                 content = {**body, "notes": page["notes"]}
                 history = records.setdefault(key, [])
                 if history and history[-1]["_content"] == content:
-                    history[-1]["document_versions"].append(doc["version"])
+                    history[-1]["document_versions"].append(version)
                     history[-1]["sources"].append(src)
                 else:
-                    history.append({"_content": content, "first_version": doc["version"],
-                                    "document_versions": [doc["version"]], "sources": [src]})
+                    history.append({"_content": content, "first_version": version,
+                                    "history_row": page["history"].get(version),
+                                    "document_versions": [version], "sources": [src]})
 
     by_version = {s["version"]: s for s in sources}
     recipe_versions = []
@@ -184,12 +212,16 @@ def build():
                 "ingredients": h["_content"]["ingredients"],
                 "steps": h["_content"]["steps"],
                 "order_notes": h["_content"]["notes"],
+                "change": {
+                    "history_row": h["history_row"],
+                    "ingredient_changes": ingredient_changes(history[n - 1]["_content"], h["_content"]) if n else None,
+                },
                 "sources": h["sources"],
             })
             prev_id = rec_id
 
-    # v1.0 메뉴는 문서 v1.0 적용 종료일이 아니라 다음 판본 등장 전까지 유효하다.
-    # 다음 판본이 없으면 effective_until=null (종료 시점 미지정).
+    # 메뉴 판본의 적용 기간은 문서 판본이 아니라 내용이 바뀐 시점으로 정한다.
+    # 내용이 같은 메뉴는 v1.0 시작부터 다음 변경 전까지 한 건이며, 변경이 없으면 effective_until=null.
     return {
         "schema": "frangizer.recipe-structured.draft",
         "schema_version": 0,
@@ -203,6 +235,7 @@ def build():
             "effective_until": "미포함(이 시각부터 적용 안 됨). null이면 종료 시점 미지정",
             "page": "PDF 파일 기준 1부터 시작. printed_page는 쪽 하단 인쇄 번호(합본 기준)",
             "order_notes": "해당 메뉴 쪽의 '주문·제조 확인사항' 원문. HOT·ICED 공통 문장일 수 있음",
+            "change": "history_row는 메뉴 쪽 '판본 이력' 표의 해당 판본 행 원문, ingredient_changes는 직전 메뉴 판본 대비 자동 비교(첫 판본은 null)",
             "aliases": "원문에 별칭 근거가 있는 경우만 기록",
         },
         "source_documents": sources,
@@ -246,7 +279,9 @@ def check(data):
                 checked += 1
                 if re.sub(r"\s+", "", f"{ing['name']}{ing['amount']}{ing['unit']}") not in t:
                     errors.append(f"{r['recipe_version_id']}: 재료 불일치 {ing} @p{src['page']}")
-            for item in r["steps"] + [{"text": n} for n in r["order_notes"]]:
+            row = r["change"]["history_row"]
+            extra = [{"text": row["applied"] + row["content"]}] if row else []
+            for item in r["steps"] + [{"text": n} for n in r["order_notes"]] + extra:
                 checked += 1
                 if re.sub(r"\s+", "", item["text"]) not in t:
                     errors.append(f"{r['recipe_version_id']}: 문장 불일치 '{item['text'][:30]}' @p{src['page']}")
