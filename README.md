@@ -187,23 +187,84 @@ frangizer/
 
 ## 실행 방법
 
-> 구현이 진행되면 이 절을 갱신합니다. 목표 실행 방식은 다음과 같습니다.
+> 서비스 코드(`backend/`, `rag/`, `frontend/`)가 모두 올라온 뒤 아래 순서로 실행합니다. 구현이 진행되면 이 절을 갱신합니다.
+
+**준비물:** Docker Desktop(Compose v2), `.env`에 넣을 값(JWT 서명키, 내부 토큰, LLM API 키, DB 비밀번호)
+
+### 1. 환경변수 준비
 
 ```bash
 cp .env.example .env
 ```
 
+`.env`의 값은 직접 채우며 **커밋하지 않습니다.** 변수는 서비스마다 필요한 것이 다릅니다.
+
+| 변수 | 사용처 | 설명 |
+| --- | --- | --- |
+| `JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE` | backend, rag, voice | JWT 서명·검증. 세 서비스가 **같은 값**을 사용 |
+| `INTERNAL_TOKEN` | backend, rag | 서비스 간 호출용 비밀 (`X-Internal-Token`) |
+| `DB_NAME`, `DB_PASSWORD` | db, backend | MariaDB 이름과 root 비밀번호 |
+| `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL` | rag | 외부 모델 설정 |
+| `FAISS_DIR`, `DOCUMENT_STORE_DIR` | rag | 볼륨 안 저장 경로 (기본값 사용) |
+| `WHISPER_MODEL` | voice | 선택. 기본 `small` |
+| `WEB_PORT` | web | 웹 공개 포트. 기본 `80` |
+
+### 2. 기동
+
 ```bash
 docker compose up -d --build
 ```
 
-| 서비스 | 주소 |
-| --- | --- |
-| 웹 | http://localhost |
-| Java API (개발) | http://localhost:8080/api/v1 |
-| 상태 확인 | http://localhost/api/v1/health |
+기동 순서는 `db → backend·rag → web`입니다. 서비스마다 헬스체크가 있어 앞 서비스가 준비된 뒤에 다음 서비스가 시작됩니다. 처음 빌드는 몇 분 걸릴 수 있습니다.
 
-필요한 환경변수: `JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE`, `INTERNAL_TOKEN`, `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL`, DB 접속 정보. 실제 값은 `.env`에만 넣고 커밋하지 않습니다.
+음성 서비스(STT)도 함께 띄우려면 `voice` 프로필을 추가합니다. 첫 음성 요청 때 Whisper 모델을 내려받습니다.
+
+```bash
+docker compose --profile voice up -d --build
+```
+
+### 3. 동작 확인
+
+```bash
+./scripts/smoke.sh http://localhost
+```
+
+웹·API 상태, 토큰 없는 접근 거부(401), 로그인, `/me`, `/rag-query`를 순서대로 점검합니다. 로그인 계정은 인자로 바꿀 수 있습니다(`./scripts/smoke.sh <주소> <아이디> <비밀번호>`).
+
+| 서비스 | 주소 | 외부 공개 |
+| --- | --- | --- |
+| 웹 | http://localhost | O |
+| API (Nginx 경유) | http://localhost/api/v1 | O |
+| 상태 확인 | http://localhost/api/v1/health | O |
+| backend · rag · voice · db | 컨테이너 내부 네트워크 전용 | X |
+
+### 4. 개발용 실행
+
+서비스를 직접 호출하며 개발할 때는 개발용 Compose를 겹쳐서 사용합니다. 내부 포트가 `127.0.0.1`에만 열립니다. **시연·배포에는 사용하지 않습니다.**
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+| 서비스 | 개발용 주소 |
+| --- | --- |
+| backend (Java API) | http://localhost:8080/api/v1 |
+| rag | http://localhost:8001 |
+| voice | http://localhost:8008 |
+| db | 127.0.0.1:3306 |
+
+### 5. 종료와 초기화
+
+```bash
+docker compose down        # 컨테이너 종료 (DB·인덱스 유지)
+docker compose down -v     # 컨테이너와 볼륨(DB, FAISS 인덱스, 업로드 문서) 삭제
+```
+
+### 참고
+
+- RAG에는 `data/source/`만 읽기 전용으로 연결됩니다. `data/staged/`(미배포 판본)는 연결하지 않으며 자동 적재하지 않습니다.
+- FAISS 인덱스와 업로드 문서는 `rag_data` 볼륨(`/var/lib/frangizer`)에 저장되고 저장소에 커밋하지 않습니다.
+- 서비스 코드가 없는 상태에서는 `docker compose up`이 실패합니다. 서비스별 `Dockerfile`은 각 담당자 폴더(`backend/`, `rag/`, `voice/`)에 있어야 합니다.
 
 ## 평가 계획
 
