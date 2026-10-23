@@ -1,0 +1,311 @@
+[
+  {
+    "name": "로그인",
+    "spec": "public",
+    "method": "post",
+    "path": "/login",
+    "request": {
+      "username": "demo-owner-a001",
+      "password": "demo-password"
+    },
+    "status": "200",
+    "response": {
+      "accessToken": "DEMO_TOKEN_REPLACE_WITH_REAL_JWT",
+      "token_type": "Bearer",
+      "expires_in": 3600,
+      "user": {
+        "id": "user-demo-01",
+        "username": "demo-owner-a001",
+        "role": "owner",
+        "brand_id": "brand-demo-a",
+        "store_id": "demo-store-01",
+        "region_code": "SEOUL",
+        "permissions": ["rag:ask"]
+      },
+      "request_id": "req-login-001"
+    }
+  },
+  {
+    "name": "정상 질문",
+    "spec": "public",
+    "method": "post",
+    "path": "/rag-query",
+    "request": {
+      "question": "아이스 바닐라라테 시럽 몇 펌프예요?",
+      "conversation_id": null,
+      "as_of": "2026-10-23T10:00:00+09:00"
+    },
+    "status": "200",
+    "response": {
+      "data": {
+        "question_id": "q-demo-001",
+        "conversation_id": "conv-demo-001",
+        "answer": "등록된 합성 레시피 v1.0 기준으로 바닐라 시럽 20 mL, 전용 펌프 4회입니다.",
+        "steps": ["전용 펌프 1회는 5 mL입니다."],
+        "status": "answered",
+        "needs_review": false,
+        "handoff": false,
+        "sources": [
+          {
+            "chunk_id": "chunk-vanilla-iced-1.0",
+            "document_id": "demo-cafe-recipes",
+            "version_id": "demo-cafe-recipes-1.0",
+            "title": "합성 카페 표준 레시피",
+            "version": "1.0",
+            "location": "PDF 5쪽 / 바닐라라테 ICED",
+            "page": 5,
+            "article": null,
+            "effective_from": "2026-10-19T00:00:00+09:00",
+            "effective_until": null,
+            "material_type": "synthetic",
+            "is_demo": true,
+            "excerpt": "바닐라 시럽 20 mL와 에스프레소 60 mL를 별도 용기에서 섞는다.",
+            "detail_url": "/api/v1/documents/demo-cafe-recipes/versions/demo-cafe-recipes-1.0",
+            "file_url": "/api/v1/documents/demo-cafe-recipes/versions/demo-cafe-recipes-1.0/file"
+          }
+        ],
+        "follow_up_questions": [],
+        "handoff_reason": null,
+        "category": "recipe",
+        "topic_id": "vanilla_syrup",
+        "classification_status": "classified",
+        "as_of": "2026-10-23T10:00:00+09:00",
+        "basis": "current",
+        "latency_ms": 2100
+      },
+      "request_id": "req-rag-001"
+    }
+  },
+  {
+    "name": "새 판본 등록",
+    "spec": "public",
+    "method": "post",
+    "path": "/documents",
+    "metadata_schema": "UploadMetadata",
+    "request": {
+      "document_id": "demo-cafe-recipes",
+      "title": "합성 카페 표준 레시피",
+      "version": "1.1",
+      "category": "recipe",
+      "material_type": "synthetic",
+      "is_demo": true,
+      "visibility": "owner",
+      "effective_from": "2026-10-26T00:00:00+09:00",
+      "change_summary": "바닐라 시럽 20→15 mL 변경 및 허니자몽블랙티 추가",
+      "original_source": {
+        "title": "합성 카페 표준 레시피",
+        "url": null,
+        "edition": "1.1",
+        "publisher": "프로젝트 팀",
+        "acquired_on": "2026-10-23",
+        "note": "실제 브랜드 제조법이 아닌 합성 데이터"
+      },
+      "indexing_policy": {
+        "include_pages": [2, 3, 4, 5, 6, 7, 8, 9],
+        "exclude_pages": [1],
+        "legal_temporal_reviewed": false
+      }
+    },
+    "status": "201",
+    "response": {
+      "data": {
+        "document_id": "demo-cafe-recipes",
+        "version_id": "demo-cafe-recipes-1.1",
+        "brand_id": "brand-demo-a",
+        "title": "합성 카페 표준 레시피",
+        "version": "1.1",
+        "category": "recipe",
+        "material_type": "synthetic",
+        "is_demo": true,
+        "visibility": "owner",
+        "effective_from": "2026-10-26T00:00:00+09:00",
+        "lifecycle": "draft",
+        "index_status": "not_started",
+        "created_at": "2026-10-23T09:00:00+09:00",
+        "approved_at": null,
+        "published_at": null,
+        "change_summary": "바닐라 시럽 20→15 mL 변경 및 허니자몽블랙티 추가",
+        "original_source": {
+          "title": "합성 카페 표준 레시피",
+          "url": null,
+          "edition": "1.1",
+          "publisher": "프로젝트 팀",
+          "acquired_on": "2026-10-23",
+          "note": "실제 브랜드 제조법이 아닌 합성 데이터"
+        },
+        "indexing_policy": {
+          "include_pages": [2, 3, 4, 5, 6, 7, 8, 9],
+          "exclude_pages": [1],
+          "legal_temporal_reviewed": false
+        },
+        "file_name": "합성_카페_레시피_v1.1.pdf",
+        "media_type": "application/pdf",
+        "file_size_bytes": 52000,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "page_count": 9,
+        "file_url": "/api/v1/documents/demo-cafe-recipes/versions/demo-cafe-recipes-1.1/file",
+        "index_revision": null
+      },
+      "request_id": "req-upload-001"
+    }
+  },
+  {
+    "name": "내부 질의",
+    "spec": "internal",
+    "method": "post",
+    "path": "/rag-query",
+    "request": {
+      "question_id": "q-demo-001",
+      "attempt_id": "attempt-demo-001",
+      "conversation_id": "conv-demo-001",
+      "question": "아이스 바닐라라테 시럽 몇 펌프예요?",
+      "principal": {
+        "user_id": "user-demo-01",
+        "role": "owner",
+        "brand_id": "brand-demo-a",
+        "store_id": "demo-store-01",
+        "permissions": ["rag:ask"]
+      },
+      "as_of": "2026-10-23T10:00:00+09:00",
+      "basis": "current",
+      "scope_revision": "scope-demo-001",
+      "allowed_versions": [
+        {
+          "document_id": "demo-cafe-recipes",
+          "version_id": "demo-cafe-recipes-1.0",
+          "index_revision": "idx-demo-1.0"
+        }
+      ],
+      "history": [],
+      "deadline_ms": 30000
+    },
+    "status": "200",
+    "response": {
+      "data": {
+        "result": {
+          "question_id": "q-demo-001",
+          "conversation_id": "conv-demo-001",
+          "answer": "등록된 합성 레시피 v1.0 기준으로 바닐라 시럽 20 mL, 전용 펌프 4회입니다.",
+          "steps": ["전용 펌프 1회는 5 mL입니다."],
+          "status": "answered",
+          "needs_review": false,
+          "handoff": false,
+          "sources": [
+            {
+              "chunk_id": "chunk-vanilla-iced-1.0",
+              "document_id": "demo-cafe-recipes",
+              "version_id": "demo-cafe-recipes-1.0",
+              "title": "합성 카페 표준 레시피",
+              "version": "1.0",
+              "location": "PDF 5쪽 / 바닐라라테 ICED",
+              "page": 5,
+              "article": null,
+              "effective_from": "2026-10-19T00:00:00+09:00",
+              "effective_until": null,
+              "material_type": "synthetic",
+              "is_demo": true,
+              "excerpt": "바닐라 시럽 20 mL와 에스프레소 60 mL를 별도 용기에서 섞는다.",
+              "detail_url": "/api/v1/documents/demo-cafe-recipes/versions/demo-cafe-recipes-1.0",
+              "file_url": "/api/v1/documents/demo-cafe-recipes/versions/demo-cafe-recipes-1.0/file"
+            }
+          ],
+          "follow_up_questions": [],
+          "handoff_reason": null,
+          "category": "recipe",
+          "topic_id": "vanilla_syrup",
+          "classification_status": "classified",
+          "as_of": "2026-10-23T10:00:00+09:00",
+          "basis": "current",
+          "latency_ms": 2100
+        },
+        "scope_revision": "scope-demo-001",
+        "classification": {
+          "category": "recipe",
+          "topic_id": "vanilla_syrup",
+          "status": "classified",
+          "version": "rules-1"
+        },
+        "usage": {
+          "input_tokens": 800,
+          "output_tokens": 110,
+          "embedding_tokens": 24,
+          "model": "configured-answer-model",
+          "embedding_model": "configured-embedding-model",
+          "estimated_cost_usd": null
+        },
+        "retrieval": {
+          "candidate_count": 5,
+          "used_chunk_ids": ["chunk-vanilla-iced-1.0"],
+          "llm_called": true
+        }
+      },
+      "request_id": "req-rag-001"
+    }
+  },
+  {
+    "name": "needs_review",
+    "spec": "public",
+    "method": "post",
+    "path": "/rag-query",
+    "request": {
+      "question": "아이스 바닐라라테 시럽 몇 펌프예요?",
+      "conversation_id": null,
+      "as_of": "2026-10-23T10:00:00+09:00"
+    },
+    "status": "200",
+    "response": {
+      "data": {
+        "question_id": "q-demo-001",
+        "conversation_id": "conv-demo-001",
+        "answer": "해당 질문은 추가 자료 또는 담당자의 확인이 필요합니다.",
+        "steps": ["전용 펌프 1회는 5 mL입니다."],
+        "status": "needs_review",
+        "needs_review": true,
+        "handoff": false,
+        "sources": [],
+        "follow_up_questions": ["승인된 관련 문서가 있나요?"],
+        "handoff_reason": "승인된 근거가 부족합니다.",
+        "category": "recipe",
+        "topic_id": null,
+        "classification_status": "pending",
+        "as_of": "2026-10-23T10:00:00+09:00",
+        "basis": "current",
+        "latency_ms": 2100
+      },
+      "request_id": "req-needs_review"
+    }
+  },
+  {
+    "name": "handoff",
+    "spec": "public",
+    "method": "post",
+    "path": "/rag-query",
+    "request": {
+      "question": "아이스 바닐라라테 시럽 몇 펌프예요?",
+      "conversation_id": null,
+      "as_of": "2026-10-23T10:00:00+09:00"
+    },
+    "status": "200",
+    "response": {
+      "data": {
+        "question_id": "q-demo-001",
+        "conversation_id": "conv-demo-001",
+        "answer": "해당 질문은 추가 자료 또는 담당자의 확인이 필요합니다.",
+        "steps": ["전용 펌프 1회는 5 mL입니다."],
+        "status": "handoff",
+        "needs_review": true,
+        "handoff": true,
+        "sources": [],
+        "follow_up_questions": ["승인된 관련 문서가 있나요?"],
+        "handoff_reason": "승인된 근거가 부족합니다.",
+        "category": "recipe",
+        "topic_id": null,
+        "classification_status": "pending",
+        "as_of": "2026-10-23T10:00:00+09:00",
+        "basis": "current",
+        "latency_ms": 2100
+      },
+      "request_id": "req-handoff"
+    }
+  }
+]
