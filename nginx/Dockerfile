@@ -1,5 +1,6 @@
 # Build context: repository root (see docker-compose.yml)
-FROM node:20-alpine AS build
+# Vite 7 needs Node 20.19+ or 22.12+
+FROM node:22-alpine AS build
 WORKDIR /app
 COPY frontend/package*.json ./
 RUN npm ci

@@ -2,9 +2,12 @@
 # Services call each other by service name (db, backend, rag, voice), never localhost.
 # Only the web (nginx) port is published. For local debugging add docker-compose.dev.yml.
 #
-# Requires: backend/Dockerfile (C), rag/Dockerfile (A,B), frontend/package.json (D).
+# Default stack (works now): db + backend + web
+#   docker compose up -d --build
+# With RAG once rag/Dockerfile exists (A,B):  docker compose --profile rag up -d --build
+# Optional speech service:                    docker compose --profile voice up -d --build
+#
 # TODO(C): backend build context is ./backend, so docs/api (Swagger spec) is not inside the image yet.
-# Optional speech service: docker compose --profile voice up -d
 
 services:
   db:
@@ -55,6 +58,8 @@ services:
     restart: unless-stopped
 
   rag:
+    # Not in the default stack until rag/ has a server and Dockerfile. Without it /rag-query returns an error.
+    profiles: ["rag"]
     build:
       context: ./rag
     environment:
