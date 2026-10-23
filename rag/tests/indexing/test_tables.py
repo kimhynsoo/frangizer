@@ -40,7 +40,7 @@ def test_chunks_keep_pairs_and_flags(make_request, roots, embedder):
         assert r["review"]["legal_temporal_reviewed"] is False
     by_page = {r["metadata"]["page"]: r["review"]["quality_flags"] for r in recs}
     assert "table_rows_paired" in by_page[122]
-    assert "table_reviewed" in by_page[2]  # 품목 목록 표는 짝짓기 대상이 아니고 표 JSON(table_reviews.json)으로 들어감
+    assert "table_reviewed" in by_page[2]  # 품목 목록 표는 짝짓기 대상이 아니고 표 옮겨 적기 기록(table_transcriptions.json)으로 들어감
     parts = [r for r in recs if r["section"]["parent_section_key"] == "p121"]
     assert [r["section"]["part"] for r in parts] == list(range(1, parts[0]["section"]["parts"] + 1))
 
@@ -61,7 +61,9 @@ def test_disclosure_prose_is_separate_from_unreviewed_cells():
     assert any('3,300' in c.text for c in tables)
 
 
-def test_region_flags_survive_index_artifacts(make_request, roots, embedder):
+def test_region_flags_survive_index_artifacts(make_request, roots, embedder, monkeypatch, tmp_path):
+    # 옮겨 적은 표 기록(table_transcriptions.json)이 없을 때 자동 추출 후보만의 동작을 본다
+    monkeypatch.setenv("TABLE_TRANSCRIPTION_FILE", str(tmp_path / "none.json"))
     req = make_request(src_name='빽다방_정보공개서_v2025-11-21.pdf', category='franchise',
                        material_type='public_disclosure',
                        indexing_policy={'include_pages': [19], 'exclude_pages': [], 'legal_temporal_reviewed': False})

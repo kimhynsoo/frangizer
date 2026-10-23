@@ -27,7 +27,7 @@ from pydantic import ValidationError
 from .chunking import CHUNKER_VERSION, chunk_document
 from .embedding import EmbeddingError, load_embedder
 from .extract import ExtractionError, extract_pdf, extract_text
-from .table_review import apply_reviews, load_reviews
+from .table_transcription import apply_reviews, load_reviews
 from .models import IndexedChunkMetadata, IndexJob, IndexJobRequest
 from .tables import extraction_signature
 
@@ -169,7 +169,10 @@ def build_chunks(req: IndexJobRequest, path: Path):
     reviewed = [p.page for p in pages if "table_reviewed" in p.flags]
     if reviewed:
         report["warnings"].append({"code": "TABLE_REVIEWED", "pages": reviewed,
-                                   "message": "PDF 원본과 대조한 표 검수 기록(data/structured/table_reviews.json)을 반영. 쪽 앞에 행 단위 표 블록"})
+                                   "message": "표 옮겨 적기 기록(data/structured/table_transcriptions.json) 또는 표 후보 승인 기록을 반영. 쪽 앞에 행 단위 표 블록"})
+    if (report.get("table_review") or {}).get("unreadable"):
+        report["warnings"].append({"code": "TABLE_TRANSCRIPTION_UNREADABLE", "error": report["table_review"]["unreadable"],
+                                   "message": "표 옮겨 적기 기록 파일을 읽지 못해 반영하지 않음(색인은 계속)"})
     rejected = (report.get("table_review") or {}).get("rejected")
     if rejected:
         report["warnings"].append({"code": "TABLE_REVIEW_REJECTED", "items": rejected,
@@ -246,7 +249,7 @@ def _chunk_records(req, chunks, rev, embedding_model, page_flags=None):
         )
         flags = sorted({f for pg in (c.pages or (c.page,)) for f in (page_flags or {}).get(pg, [])})
         if c.quality_flags is not None:
-            flags = sorted(c.quality_flags)
+            flags = sorted(set(c.quality_flags))
         records.append({
             "metadata": meta.model_dump(mode="json"), "heading": c.heading, "text": text,
             "table": c.table,
