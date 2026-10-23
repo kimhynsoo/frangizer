@@ -34,42 +34,40 @@ const button = (label) =>
       (node.attributes("aria-label") || node.text()).includes(label),
     );
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   mocks.mock = true;
   mocks.speak.mockResolvedValue(false);
 });
 afterEach(() => wrapper?.unmount());
-it("인식만으로 질문하지 않고 별도의 음성 확인 뒤에만 보낸다", async () => {
-  let confirm;
-  mocks.listen
-    .mockImplementationOnce(async (options) => {
-      options.onStopReady(() => {});
-      return "아이스 바닐라라테 시럽 몇 펌프야?";
-    })
-    .mockImplementationOnce((options) => {
-      options.onStopReady(() => {});
-      return new Promise((resolve) => (confirm = resolve));
-    });
+it("말이 끝나면 바로 편집할 수 있고 질문 낭독·음성 확인 없이 엔터로 전송한다", async () => {
+  mocks.listen.mockImplementationOnce(async (options) => {
+    options.onStopReady(() => {});
+    return "아이스 바닐라라테 시럽 몇 펌프야?";
+  });
   wrapper = mount(VoiceInput);
   await button("말로 질문하기").trigger("click");
   await flushPromises();
   expect(wrapper.get("textarea").element.value).toContain("아이스 바닐라라테");
+  expect(wrapper.get("textarea").element.disabled).toBe(false);
   expect(wrapper.emitted("confirmed")).toBeUndefined();
-  confirm("보내기");
-  await flushPromises();
+  expect(mocks.listen).toHaveBeenCalledTimes(1);
+  expect(mocks.speak).not.toHaveBeenCalled();
+  expect(wrapper.text()).not.toContain("말로 확인");
+  expect(wrapper.text()).not.toContain("인식 내용을 읽어");
+  expect(wrapper.find(".voice-actions").exists()).toBe(false);
+  await wrapper.get("textarea").trigger("keydown", { key: "Enter" });
   expect(wrapper.emitted("confirmed")).toEqual([
     [{ text: "아이스 바닐라라테 시럽 몇 펌프야?", readAnswer: false }],
   ]);
 });
-it("확인 명령이 불명확하면 질문을 보내지 않고 검토 상태를 유지한다", async () => {
-  mocks.listen
-    .mockResolvedValueOnce("바닐라라테 알려줘")
-    .mockResolvedValueOnce("안 보내");
-  wrapper = mount(VoiceInput);
+it("음성 인식 실패는 기존 초안을 남기고 질문을 전송하지 않는다", async () => {
+  mocks.listen.mockRejectedValueOnce(new Error("인식 실패"));
+  wrapper = mount(VoiceInput, { props: { modelValue: "작성 중인 질문" } });
   await button("말로 질문하기").trigger("click");
   await flushPromises();
+  expect(wrapper.get("textarea").element.value).toBe("작성 중인 질문");
   expect(wrapper.emitted("confirmed")).toBeUndefined();
-  expect(wrapper.text()).toContain("질문은 전송하지 않았습니다.");
+  expect(wrapper.text()).toContain("인식 실패");
 });
 it("취소·화면 이탈은 인식 요청의 AbortSignal을 취소한다", async () => {
   let signal;
@@ -98,7 +96,6 @@ it("녹음 없는 예시는 실제 인식으로 표시하지 않으며 명시적
 it("타이핑과 음성이 하나의 입력창과 전송 버튼을 공유하고 인식 문장도 직접 수정한다", async () => {
   mocks.listen.mockResolvedValueOnce("시럽 몇 펌프야?");
   wrapper = mount(VoiceInput);
-  await wrapper.get('input[type="checkbox"]').setValue(false);
   await wrapper.get("textarea").setValue("아이스 바닐라라테");
   await button("말로 질문하기").trigger("click");
   await flushPromises();
@@ -178,7 +175,6 @@ it("실제 API 모드도 실시간 인식이 기본이며 완료 전에 중간 �
     });
   });
   wrapper = mount(VoiceInput, { props: { modelValue: "기존 질문" } });
-  await wrapper.get('input[type="checkbox"]').setValue(false);
   expect(wrapper.get("select").element.value).toBe("browser");
   await button("말로 질문하기").trigger("click");
   options.onPartial("아이스");
