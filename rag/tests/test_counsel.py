@@ -127,7 +127,6 @@ def test_infinite_search_is_bounded(tmp_path):
 
 @pytest.mark.parametrize("final,items", [
     (draft(used_chunk_ids=["invented-chunk"]), None),
-    (draft(used_chunk_ids=[]), []),
     (draft(), [fixture_evidence(truncated=True)]),
 ])
 def test_hallucinated_or_missing_or_truncated_sources_rejected(tmp_path, final, items):
@@ -136,6 +135,43 @@ def test_hallucinated_or_missing_or_truncated_sources_rejected(tmp_path, final, 
         response = client.post("/rag-query", headers=headers(), json=query_payload())
         assert response.status_code == 502
         validate_contract(response.json(), "Error")
+
+
+@pytest.mark.parametrize('status', ['answered', 'needs_review', 'handoff'])
+def test_no_sources_returns_fixed_guidance_instead_of_error_or_general_knowledge(tmp_path, status):
+    final = draft(status=status, used_chunk_ids=[], answer='최저임금 이상을 받아야 합니다.',
+                  steps=['일반 지식으로 판단하세요.'], handoff_reason='생성된 설명')
+    client, _, _ = client_for(tmp_path, ScriptedModel(final=final), FixtureRetriever([]))
+    with client:
+        response = client.post('/rag-query', headers=headers(), json=query_payload('파이썬 리스트 정렬 알려줘'))
+        assert response.status_code == 200
+        result = response.json()['data']['result']
+        assert result['status'] == 'needs_review' and result['sources'] == []
+        assert '근거를 확인하지 못했습니다' in result['answer']
+        assert '최저임금' not in result['answer'] and result['steps'] == []
+
+
+def test_unreviewed_table_text_is_not_sent_to_model(tmp_path):
+    from dataclasses import replace
+    from langchain_core.messages import ToolMessage
+    item = replace(fixture_evidence(), quality_flags=('table_needs_review',))
+    client, model, _ = client_for(tmp_path, retriever=FixtureRetriever([item]))
+    with client:
+        response = client.post('/rag-query', headers=headers(), json=query_payload())
+        assert response.status_code == 200
+        tool_messages = [m.content for m in model.seen_messages if isinstance(m, ToolMessage)]
+        assert tool_messages and item.text not in '\n'.join(tool_messages)
+        assert 'usable_as_evidence' in tool_messages[0]
+        assert response.json()['data']['result']['status'] == 'needs_review'
+
+
+def test_numeric_answer_cannot_launder_table_value_through_unrelated_prose_source(tmp_path):
+    client, _, _ = client_for(tmp_path, ScriptedModel(final=draft(answer='교육비는 3,300천원입니다.')))
+    with client:
+        response = client.post('/rag-query', headers=headers(), json=query_payload())
+        result = response.json()['data']['result']
+        assert response.status_code == 200 and result['status'] == 'needs_review'
+        assert '3,300' not in result['answer'] and result['steps'] == []
 
 
 def test_scope_filter_before_return_and_guard_untrusted_adapter(tmp_path):

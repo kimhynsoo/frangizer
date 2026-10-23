@@ -4,11 +4,13 @@
 - 여러 쪽에 반복되는 머리말·꼬리말(법제처 머리글, '페이지 N / M' 등)만 지운다.
   본문 문장·수치·조건은 손대지 않는다.
 - 글자가 거의 없는 쪽은 스캔본일 수 있어 OCR 검토 대상으로 보고한다(자동 OCR 하지 않음).
-- 표는 PyMuPDF로 위치만 찾아 보고한다. 표 셀 추출은 칸이 깨지는 경우가 있어 본문으로 쓰지 않는다.
+- 표는 영역을 제한한 Camelot/pdfplumber로 후보 셀을 추출한다. 미검수 후보는 답변 근거로 쓰지 않는다.
 """
 import re
+import hashlib
 from collections import Counter
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import pymupdf
 
@@ -22,12 +24,20 @@ class ExtractionError(Exception):
 
 
 @dataclass
+class TextRegion:
+    kind: str  # prose | table. 경계를 모르면 분리하지 않고 기존 쪽 경고를 유지한다.
+    lines: list[str]
+    table: dict | None = None
+
+
+@dataclass
 class PageText:
     page: int | None  # PDF 1부터. Markdown/TXT는 None
     lines: list[str]
     removed_edge_lines: int = 0
     table_count: int = 0
     flags: list[str] = field(default_factory=list)
+    regions: list[TextRegion] = field(default_factory=list)
 
     @property
     def text(self):
@@ -114,13 +124,41 @@ def _same_chars(a, b):
     return strip(a) == strip(b)
 
 
-def extract_pdf(path, pages=None):
+def separate_table_regions(pg, lines, boxes):
+    """검출된 표 안의 글과 밖의 설명을 분리한다. 셀 구조의 정확성을 승인하지 않는다.
+
+    경계에 걸친 줄·겹친 표·원문 누락이 있으면 포기해 쪽 전체의 검수 경고를 유지한다.
+    표 본문은 원래 읽기 순서를 그대로 보존하고, 구조가 확인되지 않았다는 표시도 유지한다.
+    """
+    if not boxes:
+        return []
+    remaining = Counter(lines)
+    groups = [[] for _ in range(len(boxes) + 1)]
+    for x0, y0, text, x1 in _layout_lines(pg):
+        if not remaining[text]:
+            continue  # 반복 머리말·꼬리말로 제거된 줄
+        remaining[text] -= 1
+        owners = []
+        for i, (left, top, right, bottom) in enumerate(boxes, 1):
+            if top - 2 <= y0 <= bottom and x1 > left and x0 < right:
+                if x0 < left - 2 or x1 > right + 2:
+                    return []
+                owners.append(i)
+        if len(owners) > 1:
+            return []
+        groups[owners[0] if owners else 0].append(text)
+    if any(not g for g in groups[1:]) or any(remaining.values()) or not _same_chars('\n'.join(lines), '\n'.join(t for g in groups for t in g)):
+        return []
+    return [TextRegion('prose' if i == 0 else 'table', group) for i, group in enumerate(groups) if group]
+
+
+def extract_pdf(path, pages=None, *, parse_tables=True):
     """pages: 처리할 PDF 쪽 번호 집합(1부터). None이면 전체."""
     try:
         doc = pymupdf.open(path)
     except Exception as e:  # 손상·암호화 파일
         raise ExtractionError(f"PDF를 열 수 없음: {e}") from e
-    out = []
+    out, table_boxes = [], {}
     for i, pg in enumerate(doc):
         no = i + 1
         if pages is not None and no not in pages:
@@ -140,7 +178,9 @@ def extract_pdf(path, pages=None):
         if len("".join(lines)) < SCAN_MIN_CHARS:
             p.flags.append("low_text_possible_scan")
         try:
-            p.table_count = len(pg.find_tables().tables)
+            tables = pg.find_tables().tables
+            p.table_count = len(tables)
+            table_boxes[no] = [tuple(t.bbox) for t in tables]
         except Exception:
             p.flags.append("table_detection_failed")
         if paired is not None:
@@ -151,7 +191,24 @@ def extract_pdf(path, pages=None):
             p.flags.append("table_pairing_mismatch")
         out.append(p)
     _strip_repeated_edges(out)
-    return out, doc.page_count
+    source_sha = None
+    for p in out:
+        if parse_tables and 'table_needs_review' in p.flags:
+            p.regions = separate_table_regions(doc[p.page - 1], p.lines, table_boxes.get(p.page, []))
+            if p.regions:
+                from .tables import extract_local_tables, table_lines
+                source_sha = source_sha or hashlib.sha256(Path(path).read_bytes()).hexdigest()
+                table_regions = [r for r in p.regions if r.kind == 'table']
+                context = [line for r in p.regions if r.kind == 'prose' for line in r.lines]
+                candidates = extract_local_tables(path, p.page, table_boxes[p.page], doc[p.page-1].rect.height,
+                    [r.lines for r in table_regions], context, source_sha)
+                for region, candidate in zip(table_regions, candidates):
+                    if candidate:
+                        region.table = candidate
+                        region.lines = table_lines(candidate)
+    page_count = doc.page_count
+    doc.close()
+    return out, page_count
 
 
 def extract_text(path):

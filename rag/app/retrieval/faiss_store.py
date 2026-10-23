@@ -12,6 +12,7 @@ import numpy as np
 from ..errors import ServiceError, unavailable, upstream_error
 from ..schemas import AllowedVersion, IndexedChunkMetadata
 from .base import Evidence, EvidenceBatch, is_allowed, validate_batch
+from .hybrid import rank_hybrid
 
 
 class FaissRetriever:
@@ -135,9 +136,13 @@ class FaissRetriever:
         # Only permitted rows enter this index, including temporal filtering.
         restricted = faiss.IndexFlatIP(self.embedder.dim)
         restricted.add(np.asarray(vectors, dtype="float32"))
-        _, positions = restricted.search(query_vector, min(self.top_k, len(items)))
+        similarities, positions = restricted.search(query_vector, len(items))
+        # Preserve the user's literal nouns even if the agent rewrites the search query broadly.
+        ranked = rank_hybrid(context.question + '\n' + query, items, positions[0], similarities[0])
         selected, size = [], 0
-        for pos in positions[0]:
+        for pos in ranked:
+            if len(selected) == self.top_k:
+                break
             item = items[int(pos)]
             if size + len(item.text) <= 12000:
                 selected.append(item)
