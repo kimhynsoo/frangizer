@@ -106,11 +106,11 @@ def render(entry):
     out = [head]
     cols = [_cell(c)[0] for c in entry["columns"]]
     for row in entry["rows"]:
-        label, rest = _cell(row[0])[0], []
+        label, rest = (_cell(row[0])[0] if row[0] else ""), []
         for name, value in zip(cols[1:], row[1:]):
             if value:
                 rest.append(f"{name} {_cell(value)[0]}")
-        out.append(f"- {label}: " + " · ".join(rest))
+        out.append(f"- {label}: " + " · ".join(rest) if label else "- " + " · ".join(rest))
     return out
 
 
@@ -128,7 +128,7 @@ def apply_reviews(pages, raw_pages, review):
             continue
         covers = entry.get("covers", entry["pages"])
         reviewed_pages.update(covers)
-        anchor = by_page.get(covers[0])
+        anchor = by_page.get((covers or entry["pages"])[0])   # covers가 비면 행 블록만 붙이고 표시는 그대로
         block = render(entry)
         if anchor is not None and block:
             anchor.lines = block + anchor.lines

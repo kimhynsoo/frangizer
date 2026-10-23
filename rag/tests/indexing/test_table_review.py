@@ -56,11 +56,11 @@ def test_sum_check(review, raw):
 
 
 def test_apply_marks_only_covered_pages(review, raw):
-    pages, _ = extract_pdf(PAIK, {19, 20, 21, 23, 24})
+    pages, _ = extract_pdf(PAIK, {19, 20, 21, 29, 30})
     summary = apply_reviews(pages, raw, review)
     flags = {p.page: p.flags for p in pages}
     assert "table_reviewed" in flags[20] and "table_needs_review" not in flags[20]
-    assert "table_needs_review" in flags[23]  # 열 이름만 빌려 쓴 쪽은 그대로
+    assert "table_needs_review" in flags[29]  # 옮기지 못한 표(계열회사)가 남은 쪽은 그대로
     p20 = next(p for p in pages if p.page == 20)
     assert p20.lines[0].startswith(REVIEW_MARK)
     assert "- 인테리어 (점포 내장공사): 지급대상자 협력업체 · 금액 16,720" in "\n".join(p20.lines)
@@ -99,3 +99,21 @@ def test_index_job_uses_review_and_revision_tracks_it(make_request, roots, embed
     monkeypatch.setenv("TABLE_REVIEW_FILE", str(other))
     b = run_index_job(dict(req, job_id="job-test-002"), document_root=roots[0], index_root=roots[1], embedder=embedder)
     assert b["status"] == "succeeded" and b["index_revision"] != a["index_revision"]
+
+
+def test_every_table_renders(review):
+    from app.indexing.table_review import render
+    for t in review["tables"]:
+        lines = render(t)
+        assert (lines == []) == (not t.get("rows")), t["title"]
+        assert all(isinstance(l, str) and l for l in lines)
+
+
+def test_key_disclosure_tables_present(review):
+    """시연·평가에 자주 나올 표가 행 단위로 들어 있다."""
+    text = "\n".join("\n".join(__import__("app.indexing.table_review", fromlist=["render"]).render(t))
+                     for t in review["tables"])
+    assert "연도 2023 · 연초 1228 · 신규개점 241" in text or "- 2023: 연초 1228 · 신규개점 241" in text  # 가맹점 수
+    assert "매출액 388,087,962" in text                                       # 재무 현황
+    assert "- 전체: 2024년말가맹점수 1712 · 연간 평균매출액 324,486" in text      # 평균 매출액
+    assert "권장가격 3,700" in text                                            # 메뉴 권장가격

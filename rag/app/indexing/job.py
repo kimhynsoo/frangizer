@@ -27,7 +27,6 @@ from pydantic import ValidationError
 from .chunking import CHUNKER_VERSION, chunk_document
 from .embedding import EmbeddingError, load_embedder
 from .extract import ExtractionError, extract_pdf, extract_text
-from .legal_review import load_reviews as load_legal_reviews, reviewed_articles
 from .table_review import apply_reviews, load_reviews
 from .models import IndexedChunkMetadata, IndexJob, IndexJobRequest
 
@@ -100,7 +99,7 @@ def select_pages(policy, page_count):
     return pages
 
 
-def revision_id(req: IndexJobRequest, embedding_model, dimension, table_review=None, legal_review=None):
+def revision_id(req: IndexJobRequest, embedding_model, dimension, table_review=None):
     """같은 판본·같은 파일·같은 분할·같은 모델 → 같은 revision. 하나라도 바뀌면 새 revision."""
     basis = _canonical({
         "version_id": req.version_id, "sha256": req.source.sha256,
@@ -112,7 +111,6 @@ def revision_id(req: IndexJobRequest, embedding_model, dimension, table_review=N
         "effective_from": req.effective_from.isoformat(),
         "metadata": [req.title, req.version, req.visibility, req.material_type, req.is_demo, req.brand_id],
         **({"table_review": table_review} if table_review else {}),  # 검수 기록이 바뀌면 새 revision
-        **({"legal_review": legal_review} if legal_review else {}),
     })
     return "idx-" + hashlib.sha256(basis.encode()).hexdigest()[:20]
 
@@ -180,15 +178,6 @@ def build_chunks(req: IndexJobRequest, path: Path):
         raise IndexJobFailed("EXTRACTION_FAILED", "모든 쪽에서 본문을 추출하지 못했다(스캔본 가능성)")
 
     chunks, mode = chunk_document(pages, req.category, req.material_type)
-    if req.material_type == "official" and not req.indexing_policy.legal_temporal_reviewed:
-        ok, summary = reviewed_articles(chunks, load_legal_reviews(req.source.sha256))
-        for c in chunks:
-            c.legal_reviewed = c.article in ok
-        if summary:
-            report["legal_review"] = summary
-            if summary["rejected"]:
-                report["warnings"].append({"code": "LEGAL_REVIEW_REJECTED", "items": summary["rejected"],
-                                           "message": "조문 시점 검수 기록의 조건이 원문과 맞지 않아 적용하지 않음"})
     report["chunking"] = {"version": CHUNKER_VERSION, "mode": mode, "count": len(chunks),
                           "max_chars": max((len(c.text) for c in chunks), default=0),
                           "min_chars": min((len(c.text) for c in chunks), default=0)}
@@ -230,8 +219,7 @@ RECORD_FORMAT = {
     "heading": "섹션 제목(조 제목·쪽 첫 줄). 나눈 조각은 본문 첫 줄에도 '(이어서)'로 반복",
     "text": "임베딩 입력 = 이 값 그대로. content_sha256 = sha256(text, UTF-8)",
     "section": "parent_section_key·part·parts·pages — 같은 parent의 part 1..parts를 이어 붙이면 원문 섹션",
-    "review": "legal_temporal_reviewed(조각 단위: 문서 검수 또는 legal_reviews.json 조문 검수), legal_temporal_scope(document|article|null), "
-              "period_source(document|future_trailer), temporal_note, "
+    "review": "legal_temporal_reviewed(문서 단위), period_source(document|future_trailer), temporal_note, "
               "quality_flags(조각이 걸친 쪽의 추출 경고: table_needs_review 등)",
 }
 
@@ -256,9 +244,7 @@ def _chunk_records(req, chunks, rev, embedding_model, page_flags=None):
             "metadata": meta.model_dump(mode="json"), "heading": c.heading, "text": text,
             "section": {"parent_section_key": c.parent_section_key or c.section_key, "part": c.part,
                         "parts": c.parts, "pages": list(c.pages or ([c.page] if c.page else []))},
-            "review": {"legal_temporal_reviewed": req.indexing_policy.legal_temporal_reviewed or c.legal_reviewed,
-                       "legal_temporal_scope": ("document" if req.indexing_policy.legal_temporal_reviewed
-                                                else "article" if c.legal_reviewed else None),
+            "review": {"legal_temporal_reviewed": req.indexing_policy.legal_temporal_reviewed,
                        "period_source": "future_trailer" if (c.effective_from or c.effective_until) else "document",
                        "temporal_note": c.temporal_note, "quality_flags": flags},
         })
@@ -433,8 +419,7 @@ def _execute(req, rhash, job, document_root, index_root, embedder):
             raise IndexJobFailed("CHECKSUM_MISMATCH", "파일 sha256이 요청과 다르다")
         chunks, report = build_chunks(req, path)
         embedder = embedder or load_embedder()
-        rev = revision_id(req, embedder.model, embedder.dim, (report.get("table_review") or {}).get("digest"),
-                          (report.get("legal_review") or {}).get("digest"))
+        rev = revision_id(req, embedder.model, embedder.dim, (report.get("table_review") or {}).get("digest"))
         _, count = write_revision(index_root, req, chunks, report, embedder, rev)
         job = job.model_copy(update={"status": "succeeded", "chunk_count": count, "index_revision": rev,
                                      "updated_at": _now()})
