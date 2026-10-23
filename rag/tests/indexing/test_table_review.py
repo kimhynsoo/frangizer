@@ -1,0 +1,101 @@
+"""표 검수 기록(data/structured/table_reviews.json) — QA-03."""
+import copy
+import json
+
+import pymupdf
+import pytest
+
+from app.indexing.extract import extract_pdf
+from app.indexing.job import run_index_job
+from app.indexing.table_review import REVIEW_MARK, apply_reviews, load_reviews, validate
+
+from .conftest import REPO, SOURCE
+
+PAIK = SOURCE / "빽다방_정보공개서_v2025-11-21.pdf"
+REVIEWS = REPO / "data" / "structured" / "table_reviews.json"
+
+
+@pytest.fixture(scope="module")
+def raw():
+    return {i + 1: p.get_text() for i, p in enumerate(pymupdf.open(PAIK))}
+
+
+@pytest.fixture
+def review():
+    import hashlib
+    return copy.deepcopy(load_reviews(hashlib.sha256(PAIK.read_bytes()).hexdigest(), REVIEWS))
+
+
+def table(review, title):
+    return next(t for t in review["tables"] if t["title"] == title)
+
+
+def test_all_committed_reviews_match_source(review, raw):
+    assert review is not None, "정보공개서 sha256에 맞는 검수 기록이 없음 — 파일이 바뀌었으면 다시 검수"
+    for t in review["tables"]:
+        assert validate(t, raw) == [], t["title"]
+
+
+def test_changed_number_is_rejected(review, raw):
+    t = table(review, "4)기타")
+    t["rows"][0][2] = "16,270"  # 원문은 16,720
+    assert any("원문에 없는 값" in e for e in validate(t, raw))
+
+
+def test_added_text_in_display_value_is_rejected(review, raw):
+    t = table(review, "2. 영업 중의 부담")
+    cell = next(c for row in t["rows"] for c in row if isinstance(c, dict))
+    cell["text"] += " 본사 부담"  # 원문 조각에 없는 글자
+    assert any("표시 값이 원문 조각과 다름" in e for e in validate(t, raw))
+
+
+def test_sum_check(review, raw):
+    t = table(review, "4)기타")
+    t["rows"][1][2] = "4,167"  # 원문에 있는 숫자(3.3㎡당)지만 합계가 맞지 않음
+    assert any("합계 불일치" in e for e in validate(t, raw))
+
+
+def test_apply_marks_only_covered_pages(review, raw):
+    pages, _ = extract_pdf(PAIK, {19, 20, 21, 23, 24})
+    summary = apply_reviews(pages, raw, review)
+    flags = {p.page: p.flags for p in pages}
+    assert "table_reviewed" in flags[20] and "table_needs_review" not in flags[20]
+    assert "table_needs_review" in flags[23]  # 열 이름만 빌려 쓴 쪽은 그대로
+    p20 = next(p for p in pages if p.page == 20)
+    assert p20.lines[0].startswith(REVIEW_MARK)
+    assert "- 인테리어 (점포 내장공사): 지급대상자 협력업체 · 금액 16,720" in "\n".join(p20.lines)
+    assert summary["rejected"] == []
+
+
+def test_rejected_review_keeps_flag(review, raw):
+    table(review, "4)기타")["rows"][0][2] = "99,999"
+    pages, _ = extract_pdf(PAIK, {20, 21})
+    summary = apply_reviews(pages, raw, review)
+    assert [r["title"] for r in summary["rejected"]] == ["4)기타"]
+    assert all("table_needs_review" in p.flags for p in pages)
+
+
+def test_other_file_gets_no_review():
+    assert load_reviews("0" * 64, REVIEWS) is None
+
+
+def test_index_job_uses_review_and_revision_tracks_it(make_request, roots, embedder, tmp_path, monkeypatch):
+    req = make_request(src_name=PAIK.name, key="documents/paik/v1.pdf", category="franchise",
+                       material_type="public_disclosure",
+                       indexing_policy={"include_pages": [20, 21, 48], "exclude_pages": [],
+                                        "legal_temporal_reviewed": False})
+    monkeypatch.setenv("TABLE_REVIEW_FILE", str(REVIEWS))
+    a = run_index_job(req, document_root=roots[0], index_root=roots[1], embedder=embedder)
+    assert a["status"] == "succeeded", a
+    recs = [json.loads(l) for l in (roots[1] / "revisions" / a["index_revision"] / "chunks.jsonl").read_text().splitlines()]
+    assert all("table_needs_review" not in r["review"]["quality_flags"] for r in recs)
+    assert any(r["text"].startswith(REVIEW_MARK) for r in recs)
+
+    # 검수 기록이 바뀌면 같은 파일이라도 새 revision
+    changed = json.loads(REVIEWS.read_text(encoding="utf-8"))
+    changed["documents"][0]["reviewed_on"] = "2026-10-24"
+    other = tmp_path / "reviews.json"
+    other.write_text(json.dumps(changed, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setenv("TABLE_REVIEW_FILE", str(other))
+    b = run_index_job(dict(req, job_id="job-test-002"), document_root=roots[0], index_root=roots[1], embedder=embedder)
+    assert b["status"] == "succeeded" and b["index_revision"] != a["index_revision"]
