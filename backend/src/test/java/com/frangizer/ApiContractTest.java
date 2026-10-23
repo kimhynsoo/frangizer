@@ -200,6 +200,20 @@ class ApiContractTest {
         String noticeId = published.at("/data/notice_id").asString();
         assertThat(noticeId).isNotBlank();
 
+        // 판본 상세 sections: RAG가 공유 볼륨에 남긴 조각 파일을 읽는다(다른 판본 줄은 무시)
+        java.nio.file.Path chunks = java.nio.file.Path.of(System.getProperty("java.io.tmpdir"),
+                "frangizer-test-index", "revisions", "rev-1", "chunks.jsonl");
+        java.nio.file.Files.createDirectories(chunks.getParent());
+        java.nio.file.Files.writeString(chunks, """
+                {"metadata":{"chunk_id":"chk-1","version_id":"test-recipes-1.1","page":1,"article":null,"effective_from":"2026-01-01T00:00:00+09:00","effective_until":null},"heading":"바닐라라테","text":"시럽 15 mL"}
+                {"metadata":{"chunk_id":"chk-x","version_id":"other-version","page":2,"article":null,"effective_from":"2026-01-01T00:00:00+09:00","effective_until":null},"heading":"x","text":"x"}
+                """);
+        JsonNode detail = body(call(get(base), owner));
+        assertThat(detail.at("/data/sections_meta/total").asInt()).isEqualTo(1);
+        assertThat(detail.at("/data/sections/0/chunk_id").asString()).isEqualTo("chk-1");
+        assertThat(detail.at("/data/sections/0/text").asString()).isEqualTo("시럽 15 mL");
+        assertThat(detail.at("/data/sections/0/article").isNull()).isTrue();
+
         // 공지 확인: 미확인 1건 → ack → 재ack 같은 기록, prospect는 403
         assertThat(body(call(get("/api/v1/notices?unread=true"), owner)).at("/meta/total").asInt()).isEqualTo(1);
         JsonNode ack1 = body(call(put("/api/v1/notices/" + noticeId + "/ack").contentType(MediaType.APPLICATION_JSON).content("{}"), owner));

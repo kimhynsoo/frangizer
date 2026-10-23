@@ -10,4 +10,5 @@ app:
   rag-url: http://localhost:1
   voice-url: http://localhost:1
   document-store-dir: ${java.io.tmpdir}/frangizer-test-store
+  index-dir: ${java.io.tmpdir}/frangizer-test-index
   demo-password: demo-password
