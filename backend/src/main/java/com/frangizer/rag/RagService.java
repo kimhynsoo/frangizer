@@ -1,7 +1,6 @@
 package com.frangizer.rag;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -63,7 +62,9 @@ public class RagService {
         if (req.conversationId() != null && !ID.matcher(req.conversationId()).matches()) {
             throw ApiException.invalid("conversation_id", "invalid", "conversation_id 형식이 올바르지 않습니다.");
         }
-        Instant asOf = req.asOf() == null ? Instant.now() : req.asOf().toInstant();
+        Instant now = Instant.now();
+        Instant asOf = req.asOf() == null ? now : req.asOf().toInstant();
+        String basis = basis(asOf, now);
         String hash = idem.hash(req);
         String redacted = Redactor.redact(question);
 
@@ -99,7 +100,7 @@ public class RagService {
         }
 
         try {
-            return answer(user, token, key, questionId, conversationId, redacted, asOf);
+            return answer(user, token, key, questionId, conversationId, redacted, asOf, basis);
         } catch (ApiException e) {
             markFailed(questionId, e.code);
             e.questionId = questionId;
@@ -121,7 +122,7 @@ public class RagService {
     }
 
     private ResponseEntity<Object> answer(AuthUser user, String token, String key, String questionId,
-                                          String conversationId, String redacted, Instant asOf) {
+                                          String conversationId, String redacted, Instant asOf, String basis) {
         // 2. 허용 판본
         List<Map<String, Object>> allowed = allowedVersions(user, asOf);
         Set<String> allowedIds = new HashSet<>();
@@ -141,7 +142,7 @@ public class RagService {
         principal.put("permissions", user.permissions());
         body.put("principal", principal);
         body.put("as_of", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(Api.kst(asOf)));
-        body.put("basis", basis(asOf));
+        body.put("basis", basis);
         body.put("scope_revision", "scope-" + Idempotency.sha256(idem.hash(allowed).getBytes()).substring(0, 16));
         body.put("allowed_versions", allowed);
         body.put("history", history(conversationId, questionId));
@@ -316,10 +317,10 @@ public class RagService {
     }
 
     /** ponytail: KST 날짜 기준으로 과거/현재/미래를 나눈다. 시각 단위 판정이 필요하면 판본 집합 비교로 바꾼다. */
-    static String basis(Instant asOf) {
-        LocalDate day = asOf.atZone(Api.KST).toLocalDate();
-        LocalDate today = LocalDate.now(Api.KST);
-        return day.isBefore(today) ? "past" : day.isAfter(today) ? "future" : "current";
+    /** as_of 생략 시 asOf == now → current. 명시한 시각은 날짜가 아니라 시각까지 현재와 비교한다. */
+    static String basis(Instant asOf, Instant now) {
+        int c = asOf.compareTo(now);
+        return c < 0 ? "past" : c > 0 ? "future" : "current";
     }
 
     private int attemptCount(String questionId) {
