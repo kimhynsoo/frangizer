@@ -35,7 +35,8 @@ const emit = defineEmits([
   "readPreference",
   "stopReading",
 ]);
-const engine = ref(isMock ? "browser" : "server"),
+const browserSupported = recognitionAvailable();
+const engine = ref(browserSupported ? "browser" : "server"),
   phase = ref("idle"),
   transcript = ref(props.modelValue),
   partial = ref(""),
@@ -45,7 +46,6 @@ const engine = ref(isMock ? "browser" : "server"),
   handsFree = ref(true),
   readAnswer = ref(false),
   example = ref(false);
-const browserSupported = recognitionAvailable();
 const isCapturing = computed(() =>
   ["listening", "confirming"].includes(phase.value),
 );
@@ -96,7 +96,7 @@ async function listen(purpose, signal, session) {
     signal,
     maxSeconds: purpose === "confirm" ? 10 : 60,
     onPartial: (text) => {
-      if (session === run) {
+      if (session === run && !signal.aborted) {
         partial.value = text;
         if (purpose === "question")
           transcript.value = [prefix, text].filter(Boolean).join(" ");
@@ -373,9 +373,9 @@ onUnmounted(() => {
       <div class="voice-options">
         <label
           >인식 방식<select v-model="engine" :disabled="active || disabled">
-            <option value="server">STT 서버 · WebM/WAV</option>
+            <option value="server">STT 서버 · 녹음 후 입력</option>
             <option value="browser" :disabled="!browserSupported">
-              브라우저 음성 체험{{ browserSupported ? "" : " (미지원)" }}
+              실시간 음성 입력{{ browserSupported ? "" : " (미지원)" }}
             </option>
           </select></label
         >
@@ -388,12 +388,16 @@ onUnmounted(() => {
         >
       </div>
       <p v-if="engine === 'browser'" class="voice-engine-note">
-        브라우저 제공 음성 인식 서비스가 처리하며 네트워크를 사용할 수 있습니다.
-        한국어 인식을 지원하는 브라우저에서 이용하세요.
+        말하는 동안 인식한 내용이 질문창에 바로 입력됩니다. 브라우저 제공 음성
+        인식 서비스가 처리하며 네트워크를 사용할 수 있습니다.
       </p>
       <p v-else-if="isMock" class="voice-engine-note">
         샘플 모드에서는 STT 서버에 연결하지 않습니다. 실제 서버 모드로
-        전환하거나 브라우저 음성 체험을 선택해 주세요.
+        전환하거나 실시간 음성 입력을 선택해 주세요.
+      </p>
+      <p v-else class="voice-engine-note">
+        녹음이 끝나면 인식 결과가 질문창에 입력됩니다. 실시간 입력은 한국어 음성
+        인식을 지원하는 브라우저에서 이용하세요.
       </p>
       <button
         v-if="isMock"

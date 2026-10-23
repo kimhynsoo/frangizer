@@ -1,7 +1,16 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-const mocks = vi.hoisted(() => ({ listen: vi.fn(), speak: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  listen: vi.fn(),
+  speak: vi.fn(),
+  mock: true,
+}));
+vi.mock("../src/api/client", () => ({
+  get isMock() {
+    return mocks.mock;
+  },
+}));
 vi.mock("../src/api/voice", () => ({
   recognitionAvailable: () => true,
   browserListen: mocks.listen,
@@ -26,6 +35,7 @@ const button = (label) =>
     );
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.mock = true;
   mocks.speak.mockResolvedValue(false);
 });
 afterEach(() => wrapper?.unmount());
@@ -155,4 +165,37 @@ it("자동 읽기 버튼을 다시 누르면 읽기 요청을 끈다", async () 
   await wrapper.get("form").trigger("submit");
   expect(wrapper.emitted("confirmed")[0][0].readAnswer).toBe(false);
   expect(wrapper.emitted("readPreference").at(-1)).toEqual([false]);
+});
+
+it("실제 API 모드도 실시간 인식이 기본이며 완료 전에 중간 결과를 입력창과 초안에 반영한다", async () => {
+  mocks.mock = false;
+  let options, complete;
+  mocks.listen.mockImplementationOnce((o) => {
+    options = o;
+    o.onStopReady(() => {});
+    return new Promise((resolve) => {
+      complete = resolve;
+    });
+  });
+  wrapper = mount(VoiceInput, { props: { modelValue: "기존 질문" } });
+  await wrapper.get('input[type="checkbox"]').setValue(false);
+  expect(wrapper.get("select").element.value).toBe("browser");
+  await button("말로 질문하기").trigger("click");
+  options.onPartial("아이스");
+  await flushPromises();
+  expect(wrapper.get("textarea").element.value).toBe("기존 질문 아이스");
+  expect(wrapper.emitted("update:modelValue").at(-1)).toEqual([
+    "기존 질문 아이스",
+  ]);
+  options.onPartial("아이스 바닐라라테");
+  await flushPromises();
+  expect(wrapper.get("textarea").element.value).toBe(
+    "기존 질문 아이스 바닐라라테",
+  );
+  expect(wrapper.emitted("confirmed")).toBeUndefined();
+  complete("아이스 바닐라라테 시럽 몇 펌프야?");
+  await flushPromises();
+  expect(wrapper.get("textarea").element.value).toBe(
+    "기존 질문 아이스 바닐라라테 시럽 몇 펌프야?",
+  );
 });

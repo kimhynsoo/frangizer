@@ -58,7 +58,7 @@ export function browserListen({
     if (!Recognition) {
       reject(
         new Error(
-          "이 브라우저는 음성 체험을 지원하지 않습니다. Chrome·Edge 등 지원 브라우저를 사용하거나 실제 STT 서버에 연결해 주세요.",
+          "이 브라우저는 실시간 음성 입력을 지원하지 않습니다. Chrome·Edge 등 지원 브라우저를 사용하거나 실제 STT 서버에 연결해 주세요.",
         ),
       );
       return;
