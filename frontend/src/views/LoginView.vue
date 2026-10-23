@@ -14,13 +14,21 @@ const auth = useAuth(),
   busy = ref(false),
   error = ref(null);
 const profiles = [
-  { role: "prospect", name: "예비 점주", account: "demo-prospect" },
+  {
+    role: "prospect",
+    name: "예비 점주",
+    account: isMock ? "demo-prospect" : "demo-prospect-01",
+  },
   { role: "owner", name: "운영 점주", account: "demo-owner-a001" },
-  { role: "hq", name: "본사 담당자", account: "demo-hq" },
+  {
+    role: "hq",
+    name: "본사 담당자",
+    account: isMock ? "demo-hq" : "demo-hq-01",
+  },
 ];
 function fill(profile) {
   username.value = profile.account;
-  password.value = "demo-password";
+  password.value = isMock ? "demo-password" : "";
   error.value = null;
 }
 async function submit() {
@@ -67,13 +75,21 @@ async function submit() {
         <span class="eyebrow">WELCOME BACK</span>
         <h2>업무 공간에 로그인</h2>
         <p class="muted">발급받은 계정으로 시작하세요.</p>
-        <div v-if="isMock" class="demo-login">
-          <p>역할을 선택하면 시연 계정이 입력됩니다.</p>
+        <div class="demo-login">
+          <p>
+            {{
+              isMock
+                ? "역할을 선택하면 시연 계정이 입력됩니다."
+                : "역할을 선택하면 테스트 계정 아이디가 입력됩니다. 비밀번호는 직접 입력하세요."
+            }}
+          </p>
           <div class="segmented">
             <button
               v-for="profile in profiles"
+              type="button"
               :key="profile.role"
               :class="{ selected: username === profile.account }"
+              :disabled="busy"
               @click="fill(profile)"
             >
               {{ profile.name }}
