@@ -63,9 +63,11 @@ public class DocumentService {
     private final RagClient rag;
     private final TransactionTemplate tx;
     private final Path storeDir;
+    private final Path indexDir;
 
     DocumentService(JdbcClient db, ObjectMapper json, Validator validator, Idempotency idem, RagClient rag,
-                    TransactionTemplate tx, @Value("${app.document-store-dir}") String storeDir) {
+                    TransactionTemplate tx, @Value("${app.document-store-dir}") String storeDir,
+                    @Value("${app.index-dir}") String indexDir) {
         this.db = db;
         this.json = json;
         this.validator = validator;
@@ -73,6 +75,7 @@ public class DocumentService {
         this.rag = rag;
         this.tx = tx;
         this.storeDir = Path.of(storeDir);
+        this.indexDir = Path.of(indexDir);
     }
 
     // ---------------------------------------------------------------- 조회
@@ -193,13 +196,46 @@ public class DocumentService {
 
     public Map<String, Object> detail(AuthUser user, String docId, String verId, int page, int pageSize) {
         Map<String, Object> v = loadVersion(user, docId, verId);
-        // ponytail: 본문 조각은 RAG 인덱스에만 있다. 조각 조회 내부 API가 정해지면 채운다.
-        Map<String, Object> sections = Api.slice(List.of(), page, pageSize);
+        Map<String, Object> sections = Api.slice(sections(v), page, pageSize);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("version", visible(v));
         data.put("sections", sections.get("data"));
         data.put("sections_meta", sections.get("meta"));
         return data;
+    }
+
+    /**
+     * 판본의 본문 조각. RAG가 공유 볼륨에 남긴 색인 산출물(revisions/{index_revision}/chunks.jsonl)을 읽는다.
+     * 색인 전이거나 파일이 없으면 빈 목록. ponytail: 요청마다 파일을 읽는다(판본당 수백 줄). 느려지면 캐시.
+     */
+    private List<Map<String, Object>> sections(Map<String, Object> v) {
+        if (!(v.get("index_revision") instanceof String revision) || !RagService.ID.matcher(revision).matches()) {
+            return List.of();
+        }
+        Path file = indexDir.resolve("revisions").resolve(revision).resolve("chunks.jsonl");
+        if (!Files.isRegularFile(file)) return List.of();
+        try {
+            List<Map<String, Object>> out = new ArrayList<>();
+            for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+                if (line.isBlank()) continue;
+                JsonNode chunk = json.readTree(line);
+                JsonNode m = chunk.path("metadata");
+                if (!v.get("version_id").equals(m.path("version_id").asString(""))) continue; // 다른 판본 산출물 방어
+                Map<String, Object> section = new LinkedHashMap<>();
+                section.put("chunk_id", m.path("chunk_id").asString());
+                section.put("page", m.path("page").isNumber() ? m.path("page").asInt() : null);
+                section.put("article", m.path("article").isString() ? m.path("article").asString() : null);
+                section.put("heading", chunk.path("heading").asString(""));
+                section.put("text", chunk.path("text").asString(""));
+                section.put("effective_from", m.path("effective_from").asString());
+                section.put("effective_until", m.path("effective_until").isString() ? m.path("effective_until").asString() : null);
+                out.add(section);
+            }
+            return out;
+        } catch (IOException | JacksonException e) {
+            log.warn("sections unreadable revision={} error={}", revision, e.getMessage());
+            return List.of();
+        }
     }
 
     public record StoredFile(Path path, String mediaType, String fileName) {
