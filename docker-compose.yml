@@ -5,6 +5,7 @@
 # Only the web (nginx) port is published. For local debugging add docker-compose.dev.yml.
 # Required values must be set in .env; compose stops with a message if one is empty.
 
+
 services:
   db:
     image: mariadb:11
@@ -25,8 +26,7 @@ services:
 
   backend:
     build:
-      # backend/Dockerfile copies the repo root so docs/api (Swagger spec) is packed into the jar.
-      # Root .dockerignore keeps .env, build outputs and indexes out of the context.
+      # Root context: the build also copies docs/api/public.openapi.yaml for Swagger (/swagger.html)
       context: .
       dockerfile: backend/Dockerfile
     environment:
