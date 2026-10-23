@@ -180,17 +180,21 @@ def test_dimension_changes_revision_and_zero_vectors_fail(make_request, roots, e
     assert (job['status'], job['error_code']) == ('failed', 'INDEX_VALIDATION_FAILED')
 
 
-def test_unreviewed_table_cannot_be_returned_as_confirmed_numeric_answer():
+@pytest.mark.parametrize('status', ['answered', 'needs_review', 'handoff'])
+def test_unreviewed_table_cannot_be_returned_as_confirmed_numeric_answer(status):
     from dataclasses import replace
     from app.generation.answer import assemble_answer
     from app.schemas import Usage
     from tests.support import fixture_evidence
     item = replace(fixture_evidence(), quality_flags=('table_needs_review',))
     response = assemble_answer(InternalQuery.model_validate(query_payload()),
-        draft(answer='확정 금액은 123456원입니다.'), {item.metadata.chunk_id: item},
+        draft(status=status, answer='확정 금액은 123456원입니다.',
+              follow_up_questions=['123456원을 환급했나요?'], handoff_reason='123456원으로 처리'),
+        {item.metadata.chunk_id: item},
         latency_ms=0, candidate_count=1,
         usage=Usage(input_tokens=0, output_tokens=0, embedding_tokens=0,
                     model='offline', embedding_model='not-used', estimated_cost_usd=None))
     assert response.result.status == 'needs_review'
     assert '123456' not in response.result.answer and not response.result.steps
+    assert response.result.follow_up_questions == ()
     assert response.result.handoff_reason == '표 추출 품질 검수 필요'

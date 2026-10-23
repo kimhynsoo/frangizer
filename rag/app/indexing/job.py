@@ -29,6 +29,7 @@ from .embedding import EmbeddingError, load_embedder
 from .extract import ExtractionError, extract_pdf, extract_text
 from .table_review import apply_reviews, load_reviews
 from .models import IndexedChunkMetadata, IndexJob, IndexJobRequest
+from .tables import extraction_signature
 
 KST = timezone(timedelta(hours=9))
 
@@ -108,6 +109,7 @@ def revision_id(req: IndexJobRequest, embedding_model, dimension, table_review=N
         "dimension": dimension, "document_id": req.document_id, "category": req.category,
         "original_source": req.original_source.model_dump(mode="json"),
         "record_format": RECORD_FORMAT,
+        "table_extraction": extraction_signature(req.source.sha256),
         "effective_from": req.effective_from.isoformat(),
         "metadata": [req.title, req.version, req.visibility, req.material_type, req.is_demo, req.brand_id],
         **({"table_review": table_review} if table_review else {}),  # 검수 기록이 바뀌면 새 revision
@@ -124,6 +126,7 @@ def build_chunks(req: IndexJobRequest, path: Path):
             import pymupdf
             page_count = pymupdf.open(path).page_count
             pages_sel = select_pages(req.indexing_policy, page_count)
+            pages, _ = extract_pdf(path, pages_sel, parse_tables=req.category != 'recipe')
             pages, _ = extract_pdf(path, pages_sel)
             review = load_reviews(req.source.sha256)
             if review:
@@ -149,7 +152,8 @@ def build_chunks(req: IndexJobRequest, path: Path):
     report["processed_pages"] = [p.page for p in pages]
     for p in pages:
         report["pages"].append({"page": p.page, "chars": len(p.text), "removed_edge_lines": p.removed_edge_lines,
-                                "tables": p.table_count, "flags": p.flags})
+                                "tables": p.table_count, "flags": p.flags,
+                                "table_candidates": [r.table for r in p.regions if r.table]})
     scans = [p.page for p in pages if "low_text_possible_scan" in p.flags]
     if scans:
         report["warnings"].append({"code": "POSSIBLE_SCAN", "pages": scans, "message": "글자가 거의 없음. OCR 필요 여부 검토"})
@@ -218,6 +222,7 @@ RECORD_FORMAT = {
     "metadata": "IndexedChunkMetadata (계약, 추가 필드 없음)",
     "heading": "섹션 제목(조 제목·쪽 첫 줄). 나눈 조각은 본문 첫 줄에도 '(이어서)'로 반복",
     "text": "임베딩 입력 = 이 값 그대로. content_sha256 = sha256(text, UTF-8)",
+    "table": "선택: 로컬 추출 표의 셀·주변 설명·추출기·source/table SHA·검수 상태. 계약 metadata와 분리",
     "section": "parent_section_key·part·parts·pages — 같은 parent의 part 1..parts를 이어 붙이면 원문 섹션",
     "review": "legal_temporal_reviewed(문서 단위), period_source(document|future_trailer), temporal_note, "
               "quality_flags(조각이 걸친 쪽의 추출 경고: table_needs_review 등)",
@@ -240,8 +245,11 @@ def _chunk_records(req, chunks, rev, embedding_model, page_flags=None):
             content_sha256=hashlib.sha256(text.encode()).hexdigest(),
         )
         flags = sorted({f for pg in (c.pages or (c.page,)) for f in (page_flags or {}).get(pg, [])})
+        if c.quality_flags is not None:
+            flags = sorted(c.quality_flags)
         records.append({
             "metadata": meta.model_dump(mode="json"), "heading": c.heading, "text": text,
+            "table": c.table,
             "section": {"parent_section_key": c.parent_section_key or c.section_key, "part": c.part,
                         "parts": c.parts, "pages": list(c.pages or ([c.page] if c.page else []))},
             "review": {"legal_temporal_reviewed": req.indexing_policy.legal_temporal_reviewed,
