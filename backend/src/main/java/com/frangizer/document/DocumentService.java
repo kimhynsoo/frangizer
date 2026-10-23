@@ -412,9 +412,11 @@ public class DocumentService {
      * 같은 작업의 현재 상태가 돌아온다. ponytail: 프론트 폴링(2초)이 동기화 주기. 백그라운드 워커가 필요하면 @Scheduled로 옮긴다.
      */
     private void syncJob(String jobId) {
-        String jobStatus = db.sql("SELECT status FROM index_jobs WHERE job_id = :j").param("j", jobId)
-                .query(String.class).single();
-        if (Set.of("succeeded", "failed").contains(jobStatus)) return;
+        Map<String, Object> job = db.sql("SELECT status, attempt FROM index_jobs WHERE job_id = :j").param("j", jobId)
+                .query((rs, n) -> Map.<String, Object>of("status", rs.getString("status"), "attempt", rs.getInt("attempt")))
+                .single();
+        if (Set.of("succeeded", "failed").contains(job.get("status"))) return;
+        int attempt = (int) job.get("attempt");
         Map<String, Object> v = db.sql(VERSION_SQL + "JOIN index_jobs j ON j.version_id = v.version_id WHERE j.job_id = :j")
                 .param("j", jobId).query(versionMapper()).single();
 
@@ -423,7 +425,7 @@ public class DocumentService {
         source.put("sha256", v.get("sha256"));
         source.put("media_type", v.get("media_type"));
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("job_id", jobId);
+        body.put("job_id", attempt == 0 ? jobId : jobId + "-r" + attempt); // RAG는 job_id별로 한 번만 실행한다
         for (String k : List.of("brand_id", "document_id", "version_id", "title", "version", "category",
                 "material_type", "is_demo", "visibility")) {
             body.put(k, v.get(k));
@@ -448,11 +450,22 @@ public class DocumentService {
         }
         String status = data.path("status").asString("queued");
         if (!Set.of("queued", "running", "succeeded", "failed").contains(status)) return;
+        String errorCode = data.path("error_code").isString() ? data.path("error_code").asString() : null;
+        if ("failed".equals(status) && "INTERRUPTED".equals(errorCode) && attempt < MAX_INTERRUPTED_RETRIES) {
+            // RAG 재시작으로 중단됐을 뿐 내용 문제는 아니다. 공개 job_id는 유지하고 다음 조회 때 새 RAG job_id로 다시 제출한다.
+            log.warn("index job interrupted job_id={} attempt={}", jobId, attempt);
+            db.sql("UPDATE index_jobs SET attempt = attempt + 1 WHERE job_id = :j").param("j", jobId).update();
+            record(jobId, (String) v.get("version_id"), "queued", 0, null, null, null);
+            return;
+        }
         record(jobId, (String) v.get("version_id"), status, data.path("chunk_count").asInt(0),
                 data.path("index_revision").isString() ? data.path("index_revision").asString() : null,
-                data.path("error_code").isString() ? data.path("error_code").asString() : null,
+                errorCode,
                 data.path("error_message").isString() ? data.path("error_message").asString() : null);
     }
+
+    /** RAG가 계속 재시작되면 무한 재제출하지 않도록 상한을 둔다. 넘으면 failed/INTERRUPTED로 남는다. */
+    private static final int MAX_INTERRUPTED_RETRIES = 3;
 
     private void record(String jobId, String versionId, String status, int chunkCount, String revision,
                         String errorCode, String errorMessage) {

@@ -15,10 +15,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 import java.nio.charset.StandardCharsets;
 import java.time.DayOfWeek;
+import java.util.Map;
 import java.time.LocalDate;
 import java.time.temporal.TemporalAdjusters;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -118,6 +120,40 @@ class ApiContractTest {
         when(rag.submitIndexJob(any())).thenReturn(json.readTree("{\"status\":\"running\",\"chunk_count\":0}"));
         assertThat(body(call(get("/api/v1/index-jobs/" + transient_.at("/data/job_id").asString()), hq))
                 .at("/data/status").asString()).isEqualTo("running");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void interruptedIndexIsResubmittedUnderSameJob() throws Exception {
+        String hq = login("demo-hq-01");
+        String meta = """
+                {"document_id":"test-interrupted","title":"합성 중단 문서","version":"1.0","category":"recipe",
+                 "material_type":"synthetic","is_demo":true,"visibility":"owner",
+                 "effective_from":"2026-01-01T00:00:00+09:00","change_summary":"최초",
+                 "original_source":{"title":"합성","url":null,"edition":"1.0","publisher":"프로젝트 팀",
+                   "acquired_on":"2026-10-23","note":"합성 데이터"},
+                 "indexing_policy":{"exclude_pages":[],"legal_temporal_reviewed":false}}""";
+        call(multipart("/api/v1/documents")
+                .file(new MockMultipartFile("file", "r.md", "text/markdown", "# 문서".getBytes(StandardCharsets.UTF_8)))
+                .file(new MockMultipartFile("metadata", "", "application/json", meta.getBytes(StandardCharsets.UTF_8)))
+                .header("Idempotency-Key", "key-upload-int1"), hq);
+
+        // RAG 재시작으로 중단 → 판본은 queued로 돌아가고, 다음 조회 때 같은 공개 job_id 아래 새 RAG job_id로 재제출
+        when(rag.submitIndexJob(any())).thenReturn(json.readTree(
+                "{\"status\":\"failed\",\"chunk_count\":0,\"error_code\":\"INTERRUPTED\"}"));
+        JsonNode approval = body(call(post("/api/v1/documents/test-interrupted/versions/test-interrupted-1.0/approve")
+                .header("Idempotency-Key", "key-approve-int1").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"review_note\":\"검수\"}"), hq));
+        assertThat(approval.at("/data/index_status").asString()).isEqualTo("queued");
+        String jobId = approval.at("/data/job_id").asString();
+
+        when(rag.submitIndexJob(any())).thenReturn(json.readTree(
+                "{\"status\":\"succeeded\",\"chunk_count\":3,\"index_revision\":\"rev-2\"}"));
+        assertThat(body(call(get("/api/v1/index-jobs/" + jobId), hq)).at("/data/status").asString()).isEqualTo("succeeded");
+        ArgumentCaptor<Object> sent = ArgumentCaptor.forClass(Object.class);
+        verify(rag, times(2)).submitIndexJob(sent.capture());
+        assertThat(((Map<String, Object>) sent.getAllValues().get(0)).get("job_id")).isEqualTo(jobId);
+        assertThat(((Map<String, Object>) sent.getAllValues().get(1)).get("job_id")).isEqualTo(jobId + "-r1");
     }
 
     @Test
