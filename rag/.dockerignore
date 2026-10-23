@@ -1,0 +1,14 @@
+.venv
+.env
+.env.*
+!.env.example
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.demo
+tests
+var
+*.faiss
+*.sqlite3*
+.DS_Store
+**/.DS_Store
