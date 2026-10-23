@@ -4,7 +4,6 @@ import {
   Mic,
   Square,
   ArrowUp,
-  RotateCcw,
   X,
   BookOpen,
   Volume2,
@@ -12,13 +11,7 @@ import {
 } from "@lucide/vue";
 import { isMock } from "../api/client";
 import { transcribe } from "../api/stt";
-import {
-  browserListen,
-  recordAudio,
-  recognitionAvailable,
-  voiceCommand,
-  speakLocally,
-} from "../api/voice";
+import { browserListen, recordAudio, recognitionAvailable } from "../api/voice";
 const props = defineProps({
   inputId: { type: String, default: "question-input" },
   disabled: Boolean,
@@ -39,16 +32,12 @@ const browserSupported = recognitionAvailable();
 const engine = ref(browserSupported ? "browser" : "server"),
   phase = ref("idle"),
   transcript = ref(props.modelValue),
-  partial = ref(""),
   error = ref(""),
   level = ref(0),
   elapsed = ref(0),
-  handsFree = ref(true),
   readAnswer = ref(false),
   example = ref(false);
-const isCapturing = computed(() =>
-  ["listening", "confirming"].includes(phase.value),
-);
+const isCapturing = computed(() => phase.value === "listening");
 const active = computed(() => !["idle", "error"].includes(phase.value));
 const phaseText = computed(
   () =>
@@ -57,10 +46,6 @@ const phaseText = computed(
       permission: "마이크 연결을 기다리고 있어요.",
       listening: "메뉴명과 궁금한 양·순서를 말해 주세요.",
       transcribing: "말씀하신 내용을 글로 바꾸고 있어요.",
-      reading: "인식 내용을 읽어드리고 있어요.",
-      review: "메뉴명·HOT/ICED·숫자가 맞는지 확인해 주세요.",
-      confirming:
-        "맞으면 “보내기”, 바꾸려면 “다시”, 끝내려면 “취소”라고 말해 주세요.",
       error: "음성 입력을 다시 시작할 수 있어요.",
     })[phase.value],
 );
@@ -84,22 +69,18 @@ function cancel() {
   clearClock();
   phase.value = "idle";
   error.value = "";
-  partial.value = "";
 }
-async function listen(purpose, signal, session) {
+async function listen(signal, session) {
   phase.value = "permission";
   elapsed.value = 0;
-  partial.value = "";
   stopCapture = null;
   timer = setInterval(() => elapsed.value++, 1000);
   const options = {
     signal,
-    maxSeconds: purpose === "confirm" ? 10 : 60,
+    maxSeconds: 60,
     onPartial: (text) => {
       if (session === run && !signal.aborted) {
-        partial.value = text;
-        if (purpose === "question")
-          transcript.value = [prefix, text].filter(Boolean).join(" ");
+        transcript.value = [prefix, text].filter(Boolean).join(" ");
       }
     },
     onLevel: (value) => {
@@ -108,7 +89,7 @@ async function listen(purpose, signal, session) {
     onStopReady: (stop) => {
       if (session === run) {
         stopCapture = stop;
-        phase.value = purpose === "confirm" ? "confirming" : "listening";
+        phase.value = "listening";
       }
     },
   };
@@ -127,45 +108,16 @@ async function listen(purpose, signal, session) {
     if (session === run) clearClock();
   }
 }
-async function confirmByVoice(session = run) {
-  if (!transcript.value || props.disabled) return;
-  if (!controller || controller.signal.aborted)
-    controller = new AbortController();
-  const signal = controller.signal;
-  try {
-    if (handsFree.value) {
-      phase.value = "reading";
-      await speakLocally(
-        `${props.asOf ? new Date(props.asOf).toLocaleString("ko-KR") + " 기준입니다." : "현재 기준입니다."} 인식한 질문은 ${transcript.value}. 맞으면 보내기, 바꾸려면 다시, 끝내려면 취소라고 말해 주세요.`,
-        { signal },
-      );
-    }
-    if (signal.aborted || session !== run) return;
-    const command = voiceCommand(await listen("confirm", signal, session));
-    if (signal.aborted || session !== run) return;
-    phase.value = "review";
-    if (command === "send") confirm();
-    else if (command === "cancel") cancel();
-    else if (command === "retry") start(true);
-    else
-      error.value =
-        "확인 명령을 알아듣지 못했습니다. “말로 확인”을 누르거나 아래 확인 버튼을 이용하세요. 질문은 전송하지 않았습니다.";
-  } catch (e) {
-    if (session !== run || signal.aborted) return;
-    phase.value = "review";
-    error.value = e.message;
-  }
-}
-async function start(retry = false) {
+async function start() {
   if (props.disabled) return;
-  if (!retry) prefix = transcript.value.trim();
+  prefix = transcript.value.trim();
   cancel();
   const session = run;
   controller = new AbortController();
   const signal = controller.signal;
   example.value = false;
   try {
-    const text = (await listen("question", signal, session)).trim();
+    const text = (await listen(signal, session)).trim();
     if (signal.aborted || session !== run) return;
     if (!text || text.length > 2000)
       throw new Error("질문을 짧게 다시 말해 주세요. 최대 2,000자입니다.");
@@ -174,8 +126,8 @@ async function start(retry = false) {
       transcript.value = prefix;
       throw new Error("질문은 최대 2,000자입니다. 입력 내용을 줄여 주세요.");
     }
-    phase.value = "review";
-    if (handsFree.value) await confirmByVoice(session);
+    phase.value = "idle";
+    document.getElementById(props.inputId)?.focus();
   } catch (e) {
     if (session !== run || signal.aborted) return;
     transcript.value = prefix;
@@ -190,15 +142,11 @@ function confirm() {
   cancel();
   emit("confirmed", { text, readAnswer: read });
 }
-function edit() {
-  cancel();
-  document.getElementById(props.inputId)?.focus();
-}
 function demo() {
   cancel();
   example.value = true;
   transcript.value = "아이스 바닐라라테 시럽 몇 펌프예요?";
-  phase.value = "review";
+  phase.value = "idle";
 }
 watch(
   () => props.modelValue,
@@ -210,7 +158,7 @@ watch(transcript, (value) => emit("update:modelValue", value));
 watch(active, (value) => emit("active", value));
 watch(readAnswer, (value) => emit("readPreference", value));
 function submit() {
-  if (["idle", "error", "review"].includes(phase.value)) confirm();
+  if (["idle", "error"].includes(phase.value)) confirm();
 }
 function onEnter(event) {
   if (!event.isComposing) {
@@ -251,7 +199,7 @@ onUnmounted(() => {
       v-model="transcript"
       maxlength="2000"
       placeholder="질문을 입력하거나 마이크를 눌러 말해 주세요."
-      :disabled="disabled || (active && phase !== 'review')"
+      :disabled="disabled || active"
       @input="example = false"
       @keydown.enter.exact="onEnter"
     ></textarea>
@@ -262,9 +210,7 @@ onUnmounted(() => {
       aria-live="polite"
     >
       <strong>{{ phaseText }}</strong>
-      <span v-if="isCapturing"
-        >{{ elapsed }}초 / {{ phase === "confirming" ? 10 : 60 }}초</span
-      >
+      <span v-if="isCapturing">{{ elapsed }}초 / 60초</span>
     </div>
     <div v-if="isCapturing" class="voice-level" aria-hidden="true">
       <span :style="{ width: `${Math.max(4, level * 100)}%` }"></span>
@@ -281,27 +227,6 @@ onUnmounted(() => {
       >
         <Square :size="17" />말하기 끝
       </button>
-      <template v-if="phase === 'review'">
-        <button
-          type="button"
-          class="button secondary small"
-          :disabled="disabled"
-          @click="confirmByVoice()"
-        >
-          <Mic :size="17" />말로 확인
-        </button>
-        <button
-          type="button"
-          class="button secondary small"
-          :disabled="disabled"
-          @click="start(true)"
-        >
-          <RotateCcw :size="17" />다시 말하기
-        </button>
-        <button type="button" class="button ghost small" @click="edit">
-          계속 입력하기
-        </button>
-      </template>
       <button type="button" class="button ghost small" @click="cancel">
         <X :size="17" />음성 입력 취소
       </button>
@@ -350,7 +275,7 @@ onUnmounted(() => {
             (engine === 'browser' && !browserSupported) ||
             (isMock && engine === 'server')
           "
-          @click="start(false)"
+          @click="start()"
         >
           <Mic :size="22" />
         </button>
@@ -358,10 +283,7 @@ onUnmounted(() => {
           class="send-button"
           aria-label="질문 보내기"
           :disabled="
-            disabled ||
-            (active && phase !== 'review') ||
-            !transcript.trim() ||
-            transcript.length > 2000
+            disabled || active || !transcript.trim() || transcript.length > 2000
           "
         >
           <ArrowUp :size="21" />
@@ -378,13 +300,6 @@ onUnmounted(() => {
               실시간 음성 입력{{ browserSupported ? "" : " (미지원)" }}
             </option>
           </select></label
-        >
-        <label class="checkbox-label"
-          ><input
-            v-model="handsFree"
-            type="checkbox"
-            :disabled="active || disabled"
-          />말로 확인하기</label
         >
       </div>
       <p v-if="engine === 'browser'" class="voice-engine-note">
@@ -409,9 +324,8 @@ onUnmounted(() => {
         녹음 없이 사용 흐름 보기
       </button>
       <p class="voice-engine-note composer-voice-hint">
-        입력하거나 말한 내용은 위 입력창에서 수정할 수 있습니다. 말이 끝나면
-        메뉴명·HOT/ICED·수량을 확인한 뒤 “보내기”라고 말하세요. 최대 60초이며
-        취소·화면 이탈 시 마이크가 꺼집니다.
+        말한 내용은 질문창에 입력됩니다. 필요하면 수정한 뒤 엔터나 보내기
+        버튼으로 질문하세요. 최대 60초이며 취소·화면 이탈 시 마이크가 꺼집니다.
       </p>
     </details>
   </form>
