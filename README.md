@@ -198,7 +198,7 @@ frangizer/
 
 ## 실행 방법
 
-> 현재 `backend/`와 `frontend/`는 Docker로 실행할 수 있고, `rag/` 서버는 구현 중입니다. 구현이 진행되면 이 절을 갱신합니다.
+> `backend/`, `rag/`, `frontend/`를 Docker Compose 한 번으로 실행합니다. 구현이 진행되면 이 절을 갱신합니다.
 
 **준비물:** Docker Desktop(Compose v2), `.env`에 넣을 값(JWT 서명키, 내부 토큰, LLM API 키, DB 비밀번호, 시연 계정 비밀번호)
 
@@ -217,7 +217,8 @@ cp .env.example .env
 | `INTERNAL_TOKEN` | backend, rag | 서비스 간 호출용 비밀 (`X-Internal-Token`) |
 | `DB_USERNAME`, `DB_PASSWORD` | db, backend | MariaDB 앱 사용자(기본 `frangizer`)와 비밀번호. Compose가 같은 값으로 사용자를 만듭니다 |
 | `DEMO_PASSWORD` | backend | 시연 계정 비밀번호. **비어 있으면 로그인할 수 없습니다** |
-| `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL` | rag | 외부 모델 설정. 임베딩 모델을 바꾸면 전체를 다시 색인합니다 |
+| `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL` | rag | 외부 모델 설정. 비어 있어도 서비스는 뜨지만 질문은 `503`, 색인은 `EMBEDDING_NOT_CONFIGURED`로 실패합니다. 임베딩 모델은 `text-embedding-3-small` 또는 `-large`이며, 바꾸면 전체를 다시 색인합니다 |
+| `EMBEDDING_API_KEY`, `EMBEDDING_DIMENSIONS`, `EMBEDDING_BASE_URL` | rag | 선택. 비우면 `LLM_API_KEY`와 모델 기본 차원을 씁니다 |
 | `DB_URL`, `RAG_URL`, `CORS_ALLOWED_ORIGINS` | backend | 로컬 `bootRun`용 값. Compose에서는 서비스 이름(`db`, `rag`)으로 자동 대체됩니다 |
 | `DOCUMENT_STORE_DIR`, `FAISS_DIR` | backend, rag | 볼륨 안 저장 경로. 기본값 사용 |
 | `DB_NAME`, `WEB_PORT`, `WHISPER_MODEL` | db, web, voice | 선택. 기본 `frangizer`, `80`, `small` |
@@ -226,21 +227,19 @@ cp .env.example .env
 
 ### 2. 기동
 
-기본 구성은 **db + backend + web**입니다. RAG 서버가 아직 없어도 로그인과 화면, 문서·공지·집계 API를 확인할 수 있습니다.
+기본 구성은 **db + backend + rag + web**입니다.
 
 ```bash
 docker compose up -d --build
 ```
 
-기동 순서는 `db → backend → web`입니다. 서비스마다 헬스체크가 있어 앞 서비스가 준비된 뒤에 다음 서비스가 시작됩니다. 처음 빌드는 Gradle·npm 의존성을 받느라 몇 분 걸립니다.
+기동 순서는 `db → backend·rag → web`입니다. 서비스마다 헬스체크가 있어 앞 서비스가 준비된 뒤에 다음 서비스가 시작됩니다. 처음 빌드는 Gradle·npm·Python 의존성을 받느라 몇 분 걸립니다. `.env`에 필수 값(`DB_PASSWORD`, `JWT_SECRET`, `INTERNAL_TOKEN`, `DEMO_PASSWORD`)이 비어 있으면 컨테이너를 띄우기 전에 안내 메시지를 내고 멈춥니다.
 
-| 프로필 | 추가되는 서비스 | 명령 |
-| --- | --- | --- |
-| (기본) | db, backend, web | `docker compose up -d --build` |
-| `rag` | + rag (`rag/Dockerfile` 필요) | `docker compose --profile rag up -d --build` |
-| `voice` | + voice (STT, 선택) | `docker compose --profile voice up -d --build` |
+음성 서비스(STT)는 선택이며 `voice` 프로필로 추가합니다. 첫 요청 때 Whisper 모델을 내려받습니다.
 
-RAG 없이 띄우면 질문(`/rag-query`)은 `503`으로 응답합니다. 음성 서비스는 첫 요청 때 Whisper 모델을 내려받습니다.
+```bash
+docker compose --profile voice up -d --build
+```
 
 상태 확인:
 
@@ -248,11 +247,13 @@ RAG 없이 띄우면 질문(`/rag-query`)은 `503`으로 응답합니다. 음성
 docker compose ps
 ```
 
-세 서비스가 `running`이고 db·backend가 `(healthy)`이면 준비된 것입니다. 실패하면 로그를 봅니다.
+네 서비스가 `running`이고 db·backend·rag가 `(healthy)`이면 준비된 것입니다. rag는 모델 설정과 첫 색인 전에도 서버가 응답하면 `healthy`로 표시됩니다(내부 `/health`는 이때 `503 not_ready`). 실패하면 로그를 봅니다.
 
 ```bash
-docker compose logs -f backend
+docker compose logs --tail 50 backend
 ```
+
+**문서 색인:** 질문에 답하려면 문서가 색인돼 있어야 합니다. 본사 계정으로 문서를 등록 → 승인(색인) → 배포합니다. 화면의 문서 관리에서 하거나, `scripts/seed_documents.py`로 `data/source/` 원본을 한 번에 등록할 수 있습니다(PR #6 병합 후 사용 가능, 사용법은 스크립트 상단 주석).
 
 ### 3. 동작 확인
 
@@ -261,10 +262,10 @@ docker compose logs -f backend
 스크립트로 확인할 때는 다음을 실행합니다. 비밀번호는 `.env`의 `DEMO_PASSWORD`를 자동으로 읽습니다.
 
 ```bash
-SKIP_RAG=1 ./scripts/smoke.sh http://localhost
+./scripts/smoke.sh http://localhost
 ```
 
-웹·API 상태, 토큰 없는 접근 거부(401), 로그인, `/me`를 점검하고, RAG까지 띄운 경우에는 `SKIP_RAG=1` 없이 실행해 `/rag-query`도 확인합니다. 계정을 바꾸려면 `./scripts/smoke.sh <주소> <아이디> <비밀번호>`로 넘깁니다.
+웹·API 상태, 토큰 없는 접근 거부(401), 로그인, `/me`, `/rag-query`를 순서대로 점검합니다. `/rag-query`는 모델 설정과 문서 색인이 끝나야 `200`입니다. 그 전에는 `SKIP_RAG=1 ./scripts/smoke.sh http://localhost`로 질문 항목을 건너뜁니다. 계정을 바꾸려면 `./scripts/smoke.sh <주소> <아이디> <비밀번호>`로 넘깁니다.
 
 | 서비스 | 주소 | 외부 공개 |
 | --- | --- | --- |
@@ -297,11 +298,12 @@ docker compose down -v     # 컨테이너와 볼륨(DB, FAISS 인덱스, 업로�
 
 ### 참고
 
-- RAG에는 `data/source/`만 읽기 전용으로 연결됩니다. `data/staged/`(미배포 판본)는 연결하지 않으며 자동 적재하지 않습니다.
-- 업로드 문서와 FAISS 인덱스는 `frangizer_data` 볼륨(`/var/lib/frangizer`)에 저장되며, backend가 저장한 문서를 rag가 같은 볼륨에서 읽어 색인합니다. 저장소에는 커밋하지 않습니다.
+- 문서는 backend 업로드·승인을 거쳐서만 RAG에 들어갑니다. `data/source/`, `data/staged/`(미배포 판본), `eval/`, `docs/`는 컨테이너에 연결하지 않으며 자동 적재하지 않습니다. 구조화 레시피(`data/structured/`)만 읽기 전용으로 연결됩니다.
+- 업로드 문서, FAISS 인덱스, 질의 결과(SQLite)는 `frangizer_data` 볼륨(`/var/lib/frangizer`)에 저장되며, backend가 저장한 문서를 rag가 같은 볼륨에서 읽어 색인합니다. 저장소에는 커밋하지 않습니다.
 - 웹 이미지는 실제 API에 연결되도록 `VITE_USE_MOCK=false`로 빌드됩니다. 프론트를 샘플 데이터로만 보려면 `frontend/`에서 개발 서버를 따로 실행합니다.
 - Docker로 띄운 backend에는 아직 Swagger 스펙(`docs/api`)이 포함되지 않습니다(빌드 범위 조정 예정).
-- `rag`·`voice` 프로필은 해당 폴더에 `Dockerfile`이 생긴 뒤에 사용할 수 있습니다.
+- `voice` 프로필은 `voice/`에 `Dockerfile`이 생긴 뒤에 사용할 수 있습니다.
+- `.env`의 비밀번호를 바꾼 뒤에는 `docker compose down -v`로 DB를 초기화해야 반영됩니다. MariaDB는 처음 만들어질 때만 사용자를 만듭니다.
 - 80번 포트가 이미 쓰이고 있으면 `.env`의 `WEB_PORT`를 바꿉니다(예: `WEB_PORT=8088` → http://localhost:8088).
 
 ## 평가 계획
