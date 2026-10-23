@@ -2424,3 +2424,155 @@ button:disabled {
   line-height: 1.9;
   overflow-wrap: anywhere;
 }
+
+/* Chat layout: right-aligned questions and plain, full-width assistant replies. */
+.chat-page {
+  width: 100%;
+  max-width: 880px;
+  min-height: calc(100dvh - 230px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+.chat-page .page-heading {
+  margin-bottom: 24px;
+}
+.chat-thread {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+.chat-thread .message-pair {
+  margin: 12px 0 36px;
+}
+.chat-thread .question-bubble {
+  font-size: 15px;
+  line-height: 1.8;
+  max-width: 80%;
+  border-radius: 16px;
+  margin-bottom: 28px;
+  overflow-wrap: anywhere;
+}
+.chat-thread .answer-card {
+  padding: 0 4px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.chat-thread .answer-heading {
+  margin-bottom: 12px;
+}
+.chat-thread .answer-heading > .badge {
+  margin-left: 4px;
+}
+.chat-thread .answer-text {
+  font-size: 15px;
+  line-height: 1.9;
+  margin: 12px 0 18px;
+}
+.chat-thread .answer-footer {
+  border-top: 0;
+  margin-top: 12px;
+  padding-top: 0;
+}
+.chat-thread .answer-footer > span {
+  display: none;
+}
+.chat-composer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: auto;
+  padding-top: 16px;
+  background: #fff;
+}
+.chat-composer .composer {
+  margin-top: 0;
+  border-radius: 18px;
+}
+.chat-composer textarea {
+  min-height: 76px;
+  font-size: 15px;
+}
+@media (max-width: 600px) {
+  .chat-thread .question-bubble {
+    max-width: 92%;
+  }
+  .chat-composer .composer-options {
+    flex-wrap: wrap;
+  }
+}
+
+.chat-composer .composer-footer,
+.chat-composer .composer-controls {
+  flex-wrap: wrap;
+}
+.chat-composer .composer-controls {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+.answer-read-toggle[aria-pressed="true"] {
+  background: #000;
+  color: #fff;
+}
+
+.document-read-confirm {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.acknowledgements-backdrop {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.acknowledgements-dialog {
+  width: min(920px, 100%);
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  padding-bottom: 20px;
+}
+.acknowledgements-dialog > .surface-toolbar {
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.acknowledgements-dialog .ack-summary,
+.acknowledgements-dialog > .loading-line,
+.acknowledgements-dialog > .error-notice {
+  margin-left: 24px;
+  margin-right: 24px;
+}
+
+.notice-registration-dialog {
+  width: min(640px, 100%);
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+}
+.notice-registration-body {
+  padding: 24px;
+}
+.notice-registration-body > .info-banner {
+  margin-bottom: 20px;
+}
+.notice-publish-summary {
+  border: 1px solid #000;
+  border-radius: 8px;
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+.notice-publish-summary h3 {
+  margin-top: 0;
+}
+.notice-registration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}

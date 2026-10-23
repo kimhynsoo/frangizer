@@ -1,16 +1,6 @@
 <script setup>
 import { ref, nextTick, onMounted, onUnmounted } from "vue";
-import {
-  BookOpen,
-  Sparkles,
-  Coffee,
-  Store,
-  ShieldCheck,
-  MessageCircle,
-  ThumbsUp,
-  ThumbsDown,
-  Plus,
-} from "@lucide/vue";
+import { Sparkles, ThumbsUp, ThumbsDown } from "@lucide/vue";
 import { useAuth } from "../stores/auth";
 import * as api from "../api/rag";
 import { newKey } from "../api/client";
@@ -37,49 +27,14 @@ const question = ref(
   bottom = ref(null),
   voiceActive = ref(false),
   speechNotice = ref(""),
-  readingAnswer = ref(false);
+  readingAnswer = ref(false),
+  readingQuestionId = ref(null);
 let pending = null,
   answerSpeech = null,
   disposed = false;
-const suggestions =
-  auth.user.role === "prospect"
-    ? [
-        {
-          icon: Store,
-          tag: "가맹 준비",
-          title: "가맹을 준비하려면 무엇부터 확인하나요?",
-          text: "가맹카페 A의 가맹 준비 항목을 알려주세요.",
-        },
-        {
-          icon: BookOpen,
-          tag: "근거 확인",
-          title: "추가 장비 구매 근거가 궁금해요",
-          text: "추가 장비 구매 요구의 근거를 확인하고 싶어요.",
-        },
-      ]
-    : [
-        {
-          icon: Coffee,
-          tag: "레시피",
-          title: "바닐라라테, 정확한 계량이 궁금해요",
-          text: "아이스 바닐라라테의 재료와 제조 순서를 알려주세요.",
-        },
-        {
-          icon: MessageCircle,
-          tag: "고객 응대",
-          title: "고객이 이물 발견으로 환불을 요청했어요",
-          text: "음료에 이물이 있다는 고객의 환불 요청은 어떤 기준을 확인해야 하나요?",
-        },
-        {
-          icon: Store,
-          tag: "가맹 준비",
-          title: "가맹을 준비하려면 무엇부터 확인하나요?",
-          text: "가맹카페 A의 가맹 준비 항목을 알려주세요.",
-        },
-      ];
 async function send(retry = false, { readAnswer = false } = {}) {
   if (busy.value || voiceActive.value) return;
-  answerSpeech?.abort();
+  stopReading();
   speechNotice.value = "";
   if (!retry) {
     const text = question.value.trim();
@@ -131,29 +86,8 @@ async function send(retry = false, { readAnswer = false } = {}) {
     pending = null;
     await nextTick();
     bottom.value?.scrollIntoView({ behavior: "smooth", block: "end" });
-    if (attempt.readAnswer) {
-      answerSpeech = new AbortController();
-      const prefix =
-        result.status === "answered"
-          ? "등록된 문서 기준입니다."
-          : result.status === "handoff"
-            ? "담당자 확인이 필요합니다."
-            : "추가 확인이 필요합니다.";
-      readingAnswer.value = true;
-      const speech = answerSpeech;
-      speakLocally(
-        `${prefix} ${result.basis !== "current" ? "과거 또는 예정 기준 답변입니다. " : ""}${result.answer} ${result.steps.join(" ")} ${result.handoff_reason || ""}`,
-        { signal: speech.signal },
-      )
-        .then((ok) => {
-          if (!ok && !disposed && !speech.signal.aborted)
-            speechNotice.value =
-              "기기에 설치된 한국어 음성이 없어 답변을 읽지 못했습니다. 화면에서 답변을 확인해 주세요.";
-        })
-        .finally(() => {
-          if (speech === answerSpeech) readingAnswer.value = false;
-        });
-    }
+    if (attempt.readAnswer && auth.user.role !== "prospect")
+      startReading(result);
   } catch (e) {
     if (disposed) return;
     error.value = e;
@@ -168,24 +102,51 @@ async function send(retry = false, { readAnswer = false } = {}) {
 function saveDraft() {
   sessionStorage.setItem(`frangizer.question-draft.${userId}`, question.value);
 }
-function reset() {
-  if (busy.value || voiceActive.value) return;
-  answerSpeech?.abort();
-  messages.value = [];
-  conversationId.value = null;
-  question.value = "";
-  pending = null;
-  error.value = null;
-  sessionStorage.removeItem("frangizer.conversation");
-  sessionStorage.removeItem(`frangizer.question-draft.${userId}`);
-}
 function stopReading() {
   answerSpeech?.abort();
   readingAnswer.value = false;
+  readingQuestionId.value = null;
+}
+async function startReading(result) {
+  if (auth.user.role === "prospect" || voiceActive.value || disposed) return;
+  stopReading();
+  speechNotice.value = "";
+  const speech = new AbortController();
+  answerSpeech = speech;
+  readingQuestionId.value = result.question_id;
+  readingAnswer.value = true;
+  try {
+    const ok = await speakLocally(
+      `${result.answer} ${(result.steps || []).join(" ")}`,
+      { signal: speech.signal },
+    );
+    if (!ok && !disposed && !speech.signal.aborted)
+      speechNotice.value =
+        "기기에 설치된 한국어 음성이 없어 답변을 읽지 못했습니다. 화면에서 답변을 확인해 주세요.";
+  } catch {
+    if (!disposed && !speech.signal.aborted)
+      speechNotice.value = "답변을 읽지 못했습니다. 다시 시도해 주세요.";
+  } finally {
+    if (answerSpeech === speech) {
+      readingAnswer.value = false;
+      readingQuestionId.value = null;
+    }
+  }
+}
+function toggleReading(result) {
+  if (readingAnswer.value && readingQuestionId.value === result.question_id)
+    stopReading();
+  else startReading(result);
+}
+function setReadPreference(enabled) {
+  if (!enabled) {
+    if (pending) pending.readAnswer = false;
+    stopReading();
+  }
 }
 function setVoiceActive(value) {
   voiceActive.value = value;
-  if (value) answerSpeech?.abort();
+  if (value) stopReading();
 }
 async function submitQuestion(payload) {
   voiceActive.value = false;
@@ -229,64 +190,36 @@ onUnmounted(() => {
 });
 </script>
 <template>
-  <section class="ask-page">
+  <section class="ask-page chat-page">
     <div class="page-heading">
       <div>
         <span class="eyebrow">KNOWLEDGE ASSISTANT</span>
-        <h1>오늘의 운영, 무엇이 궁금하세요?</h1>
-        <p>가맹 준비부터 매장 운영까지, 문서 근거와 함께 확인하세요.</p>
+        <h1>
+          {{
+            auth.user.role === "prospect"
+              ? "가맹 준비, 무엇이 궁금하세요?"
+              : "오늘의 운영, 무엇이 궁금하세요?"
+          }}
+        </h1>
       </div>
-      <button
-        class="button secondary small"
-        :disabled="busy || voiceActive"
-        @click="reset"
-      >
-        <Plus :size="16" />새 질문
-      </button>
     </div>
-    <button v-if="readingAnswer" class="button secondary" @click="stopReading">
-      답변 읽기 중지
-    </button>
     <p v-if="speechNotice" class="info-banner" role="status">
       {{ speechNotice }}
     </p>
-    <div v-if="!messages.length" class="ask-welcome">
-      <div class="welcome-symbol"><Sparkles :size="27" /></div>
-      <h2>필요한 기준을 찾는<br /><span>가장 가까운 파트너.</span></h2>
-      <p>질문을 남기면 승인된 문서에서 근거를 찾아 안내해 드려요.</p>
-      <div class="suggestion-grid">
-        <button
-          v-for="suggestion in suggestions"
-          :key="suggestion.tag"
-          class="suggestion-card"
-          @click="
-            question = suggestion.text;
-            saveDraft();
-          "
-          :disabled="busy || voiceActive"
-        >
-          <div>
-            <span class="suggestion-icon"
-              ><component :is="suggestion.icon" :size="20" /></span
-            ><span class="suggestion-tag">{{ suggestion.tag }}</span
-            ><ArrowUpRight :size="17" />
-          </div>
-          <strong>{{ suggestion.title }}</strong
-          ><small>질문 입력하기</small>
-        </button>
-      </div>
-      <div class="trust-strip">
-        <ShieldCheck :size="17" /><span>문서 근거 확인</span><i></i
-        ><span>적용일·판본 표시</span><i></i><span>확인 필요 사항 안내</span>
-      </div>
-    </div>
-    <div v-else class="conversation">
+    <div
+      v-if="messages.length"
+      class="conversation chat-thread"
+      role="log"
+      aria-label="질문과 답변"
+    >
       <article
         v-for="message in messages"
         :key="message.id"
         class="message-pair"
       >
-        <div class="question-bubble">{{ message.question }}</div>
+        <div class="question-bubble">
+          <span class="sr-only">내 질문: </span>{{ message.question }}
+        </div>
         <div class="answer-card">
           <div class="answer-heading">
             <span class="assistant-avatar"><Sparkles :size="17" /></span
@@ -297,6 +230,12 @@ onUnmounted(() => {
               :result="message.result"
               :question="message.question"
               :disable-speech="voiceActive"
+              :allow-read-aloud="auth.user.role !== 'prospect'"
+              :external-reading="
+                readingAnswer &&
+                readingQuestionId === message.result.question_id
+              "
+              @toggle-read="toggleReading(message.result)"
               @source="source = $event"
             />
             <div class="answer-footer">
@@ -365,18 +304,24 @@ onUnmounted(() => {
       @retry="pending ? send(true) : loadConversation()"
     /><ErrorNotice :error="feedbackError" />
     <div ref="bottom"></div>
-    <VoiceInput
-      v-model="question"
-      v-model:as-of="asOf"
-      :disabled="busy"
-      @active="setVoiceActive"
-      @confirmed="submitQuestion"
-      @update:model-value="saveDraft"
-    />
-    <p class="composer-note">
-      개인정보 입력을 피해주세요. 답변의 출처와 적용일을 확인하고, 필요한 결정은
-      담당자와 확정하세요.
-    </p>
+    <div class="chat-composer">
+      <VoiceInput
+        v-model="question"
+        v-model:as-of="asOf"
+        :disabled="busy"
+        :allow-read-aloud="auth.user.role !== 'prospect'"
+        :reading-answer="readingAnswer"
+        @stop-reading="stopReading"
+        @active="setVoiceActive"
+        @confirmed="submitQuestion"
+        @read-preference="setReadPreference"
+        @update:model-value="saveDraft"
+      />
+      <p class="composer-note">
+        개인정보 입력을 피해주세요. 답변의 출처와 적용일을 확인하고, 필요한
+        결정은 담당자와 확정하세요.
+      </p>
+    </div>
   </section>
   <SourcePanel v-if="source" :source="source" @close="source = null" />
 </template>

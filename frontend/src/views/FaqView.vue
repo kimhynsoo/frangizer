@@ -24,7 +24,6 @@ const groups = computed(() => {
         <p>가맹을 준비하며 궁금한 내용을 찾아보세요.</p>
       </div>
     </div>
-    <p class="info-banner">질문을 클릭하면 답변을 바로 확인할 수 있습니다.</p>
     <label class="faq-search"
       ><span><Search :size="16" />질문 검색</span
       ><input
