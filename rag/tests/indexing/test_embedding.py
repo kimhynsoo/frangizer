@@ -33,6 +33,7 @@ def api():
     state["url"] = f"http://127.0.0.1:{srv.server_port}/v1"
     yield state
     srv.shutdown()
+    srv.server_close()
 
 
 def embedder(api):

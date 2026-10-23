@@ -1,28 +1,10 @@
-"""임베딩 연결 지점.
-
-문서와 질문은 같은 모델·설정을 써야 한다(B 검색과 공유). 모델을 바꾸면 전체 재색인.
-초기 제안(B 정리, 2026-10-23): text-embedding-3-small, 1536차원 — A·B·E 최종 합의·품질 검증 전.
-
-환경변수
-- EMBEDDING_MODEL: 아래 MODELS 중 하나. 없거나 모르는 값이면 EMBEDDING_NOT_CONFIGURED로 실패(가짜 벡터로 성공시키지 않음)
-- LLM_API_KEY: OpenAI 호환 API 키 (계약 11.3의 환경변수 목록을 따른다)
-- EMBEDDING_BASE_URL: 기본 https://api.openai.com/v1 (테스트·프록시용)
-
-B가 LangChain OpenAIEmbeddings(model=같은 이름)로 질문을 임베딩하면 같은 벡터 공간이다.
-색인 쪽은 벡터를 L2 정규화해 내적으로 검색한다(= 코사인). 질문 벡터도 정규화해야 한다.
-"""
-import json
+"""Shared embedding adapter: bounded query calls, retryable indexing calls, no implicit model."""
 import os
 import time
-import urllib.error
-import urllib.request
 from typing import Protocol
 
 import numpy as np
-
-MODELS = {"text-embedding-3-small": 1536, "text-embedding-3-large": 3072}
-BATCH = 64
-RETRIES = 3
+from openai import APIConnectionError, APIStatusError, OpenAI
 
 
 class EmbeddingError(Exception):
@@ -34,55 +16,71 @@ class EmbeddingError(Exception):
 class Embedder(Protocol):
     model: str
     dim: int
-
-    def embed(self, texts: list[str]) -> np.ndarray:  # (n, dim) float32
-        ...
+    def embed(self, texts: list[str]) -> np.ndarray: ...
 
 
 class OpenAIEmbedder:
-    def __init__(self, model, api_key, base_url="https://api.openai.com/v1", timeout=60, sleep=time.sleep):
-        self.model, self.dim = model, MODELS[model]
-        self._key, self._url = api_key, base_url.rstrip("/") + "/embeddings"
-        self._timeout, self._sleep = timeout, sleep
+    def __init__(self, model, api_key, base_url='https://api.openai.com/v1', timeout=20, sleep=time.sleep,
+                 *, dimensions=None, client=None):
+        supported = {'text-embedding-3-small': 1536, 'text-embedding-3-large': 3072}
+        if model not in supported or not api_key:
+            raise EmbeddingError('EMBEDDING_NOT_CONFIGURED', '지원 모델과 임베딩 인증값을 설정해 주세요')
+        self.model, self.dim = model, supported[model] if dimensions is None else dimensions
+        if not 1 <= self.dim <= supported[model]:
+            raise EmbeddingError('EMBEDDING_NOT_CONFIGURED', '임베딩 차원 설정을 확인해 주세요')
+        self.client = client or OpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=0)
+        self.sleep = sleep
 
-    def _post(self, batch):
-        body = json.dumps({"model": self.model, "input": batch, "encoding_format": "float"}).encode()
-        req = urllib.request.Request(self._url, data=body, method="POST", headers={
-            "Authorization": f"Bearer {self._key}", "Content-Type": "application/json"})
-        for attempt in range(RETRIES + 1):
+    def _request(self, part, retries):
+        for attempt in range(retries + 1):
             try:
-                with urllib.request.urlopen(req, timeout=self._timeout) as r:
-                    return json.loads(r.read())
-            except urllib.error.HTTPError as e:
-                retryable = e.code == 429 or e.code >= 500
-                reason = f"HTTP {e.code}"
-            except (urllib.error.URLError, TimeoutError) as e:
-                retryable, reason = True, type(e).__name__
-            if not retryable or attempt == RETRIES:
-                raise EmbeddingError("EMBEDDING_FAILED", f"임베딩 호출 실패: {reason}")  # 키·본문은 남기지 않는다
-            self._sleep(2 ** attempt)
+                return self.client.embeddings.create(
+                    model=self.model, input=part, dimensions=self.dim, encoding_format='float',
+                )
+            except (APIConnectionError, APIStatusError) as exc:
+                status = getattr(exc, 'status_code', None)
+                retryable = status is None or status == 429 or status >= 500
+                reason = f'HTTP {status}' if status else '연결 오류'
+                if not retryable or attempt == retries:
+                    raise EmbeddingError('EMBEDDING_FAILED', f'임베딩 호출 실패: {reason}') from None
+                self.sleep(2 ** attempt)
+
+    def embed_with_usage(self, texts, *, retries=0):
+        # Query embedding never retries; indexing may retry transient failures.
+        if not texts or any(not isinstance(t, str) or not t.strip() for t in texts):
+            raise EmbeddingError('EMBEDDING_FAILED', '빈 임베딩 입력입니다')
+        vectors, tokens = [], 0
+        try:
+            for start in range(0, len(texts), 64):
+                part = texts[start:start + 64]
+                response = self._request(part, retries)
+                ordered = sorted(response.data, key=lambda item: item.index)
+                if [item.index for item in ordered] != list(range(len(part))):
+                    raise ValueError('embedding index mismatch')
+                vectors.extend(item.embedding for item in ordered)
+                tokens += response.usage.total_tokens if response.usage else 0
+            array = np.asarray(vectors, dtype='float32')
+            if (array.shape != (len(texts), self.dim) or not np.isfinite(array).all()
+                    or np.any(np.linalg.norm(array, axis=1) == 0)):
+                raise ValueError('invalid embedding vectors')
+            return array, tokens
+        except EmbeddingError:
+            raise
+        except Exception:
+            raise EmbeddingError('EMBEDDING_FAILED', '임베딩 응답 개수·차원·벡터 형식을 확인해 주세요') from None
 
     def embed(self, texts):
-        out = []
-        for i in range(0, len(texts), BATCH):
-            batch = texts[i:i + BATCH]
-            data = self._post(batch).get("data", [])
-            if len(data) != len(batch):
-                raise EmbeddingError("EMBEDDING_FAILED", f"응답 개수 불일치: {len(data)}/{len(batch)}")
-            vecs = [d["embedding"] for d in sorted(data, key=lambda d: d["index"])]
-            if any(len(v) != self.dim for v in vecs):
-                raise EmbeddingError("EMBEDDING_FAILED", "응답 차원 불일치")
-            out.extend(vecs)
-        return np.asarray(out, dtype="float32").reshape(len(texts), self.dim)
+        return self.embed_with_usage(texts, retries=3)[0]
 
 
 def load_embedder() -> Embedder:
-    model = os.environ.get("EMBEDDING_MODEL")
-    if not model:
-        raise EmbeddingError("EMBEDDING_NOT_CONFIGURED", "EMBEDDING_MODEL이 설정되지 않았다")
-    if model not in MODELS:
-        raise EmbeddingError("EMBEDDING_NOT_CONFIGURED", f"지원하지 않는 EMBEDDING_MODEL: {model}")
-    key = os.environ.get("LLM_API_KEY")
-    if not key:
-        raise EmbeddingError("EMBEDDING_NOT_CONFIGURED", "LLM_API_KEY가 설정되지 않았다")
-    return OpenAIEmbedder(model, key, os.environ.get("EMBEDDING_BASE_URL", "https://api.openai.com/v1"))
+    try:
+        raw_dim = os.environ.get('EMBEDDING_DIMENSIONS', '')
+        return OpenAIEmbedder(
+            os.environ.get('EMBEDDING_MODEL', ''),
+            api_key=os.environ.get('EMBEDDING_API_KEY') or os.environ.get('LLM_API_KEY', ''),
+            base_url=os.environ.get('EMBEDDING_BASE_URL') or 'https://api.openai.com/v1',
+            dimensions=int(raw_dim) if raw_dim else None,
+        )
+    except (TypeError, ValueError):
+        raise EmbeddingError('EMBEDDING_NOT_CONFIGURED', '임베딩 설정을 확인해 주세요') from None

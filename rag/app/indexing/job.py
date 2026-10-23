@@ -98,12 +98,15 @@ def select_pages(policy, page_count):
     return pages
 
 
-def revision_id(req: IndexJobRequest, embedding_model):
+def revision_id(req: IndexJobRequest, embedding_model, dimension):
     """같은 판본·같은 파일·같은 분할·같은 모델 → 같은 revision. 하나라도 바뀌면 새 revision."""
     basis = _canonical({
         "version_id": req.version_id, "sha256": req.source.sha256,
         "indexing_policy": req.indexing_policy.model_dump(mode="json", exclude_unset=True),
         "chunker": CHUNKER_VERSION, "embedding_model": embedding_model,
+        "dimension": dimension, "document_id": req.document_id, "category": req.category,
+        "original_source": req.original_source.model_dump(mode="json"),
+        "record_format": RECORD_FORMAT,
         "effective_from": req.effective_from.isoformat(),
         "metadata": [req.title, req.version, req.visibility, req.material_type, req.is_demo, req.brand_id],
     })
@@ -284,6 +287,8 @@ def write_revision(index_root: Path, req, chunks, report, embedder, rev):
             raise EmbeddingError("EMBEDDING_FAILED", f"임베딩 호출 실패: {type(e).__name__}") from e
         if vectors.shape != (len(records), embedder.dim):
             raise IndexJobFailed("INDEX_VALIDATION_FAILED", f"임베딩 결과 형태 불일치: {vectors.shape}")
+        if not np.isfinite(vectors).all() or np.any(np.linalg.norm(vectors, axis=1) == 0):
+            raise IndexJobFailed("INDEX_VALIDATION_FAILED", "유효하지 않은 임베딩 벡터")
         faiss.normalize_L2(vectors)
         index = faiss.IndexFlatIP(embedder.dim)
         index.add(vectors)
@@ -319,8 +324,8 @@ def write_revision(index_root: Path, req, chunks, report, embedder, rev):
 def default_roots():
     """C 회신(2026-10-23): 볼륨 하나를 backend·rag 모두 /var/lib/frangizer에 마운트.
     저장 키 documents/{document_id}/{version_id}.pdf는 DOCUMENT_STORE_DIR 기준 상대 경로다."""
-    return (Path(os.environ.get("DOCUMENT_STORE_DIR", "/var/lib/frangizer")),
-            Path(os.environ.get("FAISS_DIR", "/var/lib/frangizer/faiss")))
+    return (Path(os.environ.get("DOCUMENT_STORE_DIR") or "/var/lib/frangizer"),
+            Path(os.environ.get("FAISS_DIR") or "/var/lib/frangizer/faiss"))
 
 
 class JobStore:
@@ -398,7 +403,7 @@ def _execute(req, rhash, job, document_root, index_root, embedder):
             raise IndexJobFailed("CHECKSUM_MISMATCH", "파일 sha256이 요청과 다르다")
         chunks, report = build_chunks(req, path)
         embedder = embedder or load_embedder()
-        rev = revision_id(req, embedder.model)
+        rev = revision_id(req, embedder.model, embedder.dim)
         _, count = write_revision(index_root, req, chunks, report, embedder, rev)
         job = job.model_copy(update={"status": "succeeded", "chunk_count": count, "index_revision": rev,
                                      "updated_at": _now()})
