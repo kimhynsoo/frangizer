@@ -3,15 +3,17 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   MessageSquare,
+  CircleHelp,
   FolderOpen,
   Bell,
   ChartNoAxesCombined,
   ArrowUpRight,
   LogOut,
-  Sprout,
   Menu,
   ShieldCheck,
 } from "@lucide/vue";
+import BrandWorkspace from "./components/BrandWorkspace.vue";
+import ConnectionMark from "./components/ConnectionMark.vue";
 import { useAuth } from "./stores/auth";
 import { useNotices } from "./stores/notices";
 import { isMock } from "./api/client";
@@ -28,6 +30,9 @@ const roleNames = {
 const links = computed(() => [
   ...(auth.can("rag:ask")
     ? [{ path: "/ask", label: "질문하기", icon: MessageSquare }]
+    : []),
+  ...(auth.user?.role === "prospect" && auth.can("rag:ask")
+    ? [{ path: "/faq", label: "자주 묻는 질문", icon: CircleHelp }]
     : []),
   {
     path: "/documents",
@@ -102,18 +107,15 @@ onUnmounted(() => window.removeEventListener("session-expired", expired));
     ></button>
     <aside class="sidebar" :class="{ open: menu }">
       <RouterLink class="brand" to="/"
-        ><span class="brand-mark"><Sprout :size="23" /></span
+        ><span class="brand-mark"><ConnectionMark :size="23" /></span
         ><span>프랜자이저<small>FRANGIZER WORKSPACE</small></span></RouterLink
       >
-      <div class="brand-switch">
-        <span class="store-monogram">A</span>
-        <div>
-          <strong>가맹카페 A</strong><small>가상 프랜차이즈 · 시연 기업</small>
-        </div>
-        <span class="switch-dot"></span>
-      </div>
-      <div class="nav-label">WORKSPACE</div>
-      <nav aria-label="주요 메뉴">
+      <BrandWorkspace
+        :key="auth.user?.brand_id"
+        :name="isMock ? '가맹카페 A' : auth.user?.brand_id || '가맹 브랜드'"
+        :monogram="isMock ? 'A' : ''"
+        :caption="isMock ? '가상 프랜차이즈 · 시연 기업' : '브랜드 업무 공간'"
+      >
         <RouterLink
           v-for="link in links"
           :key="link.path"
@@ -126,30 +128,13 @@ onUnmounted(() => window.removeEventListener("session-expired", expired));
             >{{ notices.unread }}</span
           ></RouterLink
         >
-      </nav>
+      </BrandWorkspace>
       <div class="sidebar-bottom">
         <div class="sidebar-note">
           <ShieldCheck :size="20" /><strong
             >근거가 있는 안내,<br />더 명확한 매장 운영.</strong
           >
           <p>승인된 문서를 바탕으로<br />필요한 기준을 확인하세요.</p>
-        </div>
-        <div class="user-row">
-          <span class="avatar">{{
-            auth.user?.role === "hq" ? "본" : "점"
-          }}</span>
-          <div>
-            <strong>{{ roleNames[auth.user?.role] }}</strong
-            ><small>{{ auth.user?.store_id || "가맹카페 A" }}</small>
-          </div>
-          <button
-            class="icon-button"
-            title="로그아웃"
-            aria-label="로그아웃"
-            @click="logout"
-          >
-            <LogOut :size="17" />
-          </button>
         </div>
       </div>
     </aside>
@@ -166,9 +151,27 @@ onUnmounted(() => window.removeEventListener("session-expired", expired));
           ><strong>{{ route.meta.title }}</strong>
         </div>
         <div class="topbar-right">
-          <span class="mode-indicator" :class="{ live: !isMock }"
-            ><i></i>{{ isMock ? "샘플 데이터 시연" : "API 연결 모드" }}</span
-          ><span class="topbar-role">{{ roleNames[auth.user?.role] }}</span>
+          <div
+            class="user-row topbar-account"
+            role="group"
+            aria-label="로그인 계정"
+          >
+            <span class="avatar">{{
+              auth.user?.role === "hq" ? "본" : "점"
+            }}</span>
+            <div>
+              <strong>{{ roleNames[auth.user?.role] }}</strong
+              ><small>{{ auth.user?.store_id || "가맹카페 A" }}</small>
+            </div>
+            <button
+              class="icon-button"
+              title="로그아웃"
+              aria-label="로그아웃"
+              @click="logout"
+            >
+              <LogOut :size="17" />
+            </button>
+          </div>
         </div>
       </header>
       <main id="main-content" class="main-content">
