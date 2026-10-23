@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:frangizer;MODE=MariaDB;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+app:
+  jwt:
+    secret: test-secret-test-secret-test-secret-0123456789
+  internal-token: test-internal-token
+  rag-url: http://localhost:1
+  document-store-dir: ${java.io.tmpdir}/frangizer-test-store
+  demo-password: demo-password
