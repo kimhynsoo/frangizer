@@ -1,0 +1,50 @@
+{
+  "source_sha256": "968d9d6abb51b41a80c6d3bb73aaabb257267a629e21a98a4f0302cfda0c0742",
+  "media_type": "application/pdf",
+  "legal_temporal_reviewed": false,
+  "pages": [
+    {
+      "page": 3,
+      "chars": 1955,
+      "removed_edge_lines": 2,
+      "tables": 0,
+      "flags": []
+    },
+    {
+      "page": 4,
+      "chars": 1983,
+      "removed_edge_lines": 2,
+      "tables": 0,
+      "flags": []
+    },
+    {
+      "page": 5,
+      "chars": 2096,
+      "removed_edge_lines": 2,
+      "tables": 0,
+      "flags": []
+    },
+    {
+      "page": 6,
+      "chars": 965,
+      "removed_edge_lines": 2,
+      "tables": 0,
+      "flags": []
+    }
+  ],
+  "warnings": [],
+  "page_count": 6,
+  "processed_pages": [
+    3,
+    4,
+    5,
+    6
+  ],
+  "chunking": {
+    "version": "chunker-v2",
+    "mode": "articles+pages",
+    "count": 8,
+    "max_chars": 1718,
+    "min_chars": 121
+  }
+}

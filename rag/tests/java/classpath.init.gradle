@@ -1,0 +1,8 @@
+allprojects {
+    afterEvaluate {
+        tasks.register('ragInteropClasspath') {
+            dependsOn tasks.named('classes')
+            doLast { println sourceSets.test.runtimeClasspath.asPath }
+        }
+    }
+}

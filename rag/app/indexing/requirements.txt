@@ -1,0 +1,3 @@
+# The integrated RAG service uses one dependency list, including PDF/FAISS packages.
+-r ../../requirements.txt
+# For tests install rag/requirements-dev.txt.
