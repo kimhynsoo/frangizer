@@ -52,6 +52,30 @@ python -m tests.backend_smoke
 
 이 검사를 실제 임베딩 검색·LLM 상담 품질, MariaDB 또는 브라우저 E2E 통과로 해석하지 않습니다.
 
+## 실행 전 점검
+
+실제 API·DB 호출, 서버 시작, 색인 없이 설정과 경로만 확인합니다. 비밀값은 출력하지 않습니다.
+
+```bash
+cd /Users/inwoopark/workspace/ai-service/ai-service-project/frangizer/rag
+source .venv/bin/activate
+python -m app.preflight --env-file ../.env
+```
+
+프로세스 환경변수가 `.env`보다 우선합니다(uvicorn과 동일). 통과는 키의 실제 유효성, 계정의 모델 접근 권한, DB 연결, 답변 품질을 보장하지 않습니다. 선택한 `gpt-5.4-mini` 요청 형식은 네트워크 없는 LangChain 검사에도 포함합니다.
+
+로컬 개발 웹은 `frontend/.env.development.local`에 `VITE_USE_MOCK=false`, `VITE_API_BASE_URL=http://localhost:8080/api/v1`을 설정합니다. Docker 프론트도 **빌드 시** `VITE_USE_MOCK=false`를 주입해야 합니다. 생산 빌드의 API 기본 경로는 `/api/v1`입니다. 생성된 프론트 JS에 서버용 API 키나 내부 토큰을 넣지 않습니다.
+
+Docker 구성 도착 후 확인할 연결 조건:
+
+- backend 빌드 context는 저장소 루트, Dockerfile은 `backend/Dockerfile`. Gradle 작업 위치는 `/src/backend`이며 Swagger YAML이 JAR에 포함되어야 합니다. 루트 `.dockerignore`가 실제 `.env`·가상환경·실행 산출물을 제외합니다.
+- 컨테이너 간 `DB_URL`, `RAG_URL`은 localhost가 아닌 Compose 서비스 주소를 사용합니다. 로컬 `.env`의 3307은 호스트 연결용이며 DB 컨테이너 내부 포트와 구분합니다.
+- backend/RAG가 같은 볼륨을 `/var/lib/frangizer`에 마운트하고 FAISS·상태 DB도 그 아래에 둡니다. 레시피 JSON은 `data/structured/demo_cafe_recipes.json`을 이미지에 COPY하거나 파일로 마운트하고, 경로도 컨테이너 내부 위치로 바꿉니다. 호스트의 절대 경로를 그대로 넘기지 않습니다.
+- RAG 명령은 `uvicorn app.bootstrap:create_service --factory --host 0.0.0.0 --port 8001 --workers 1`입니다. 이미지 Python은 검증한 3.11을 사용합니다.
+- **첫 색인 전 `/health=503`은 정상**입니다. backend의 시작을 RAG `service_healthy`에 종속시키면 초기 업로드·승인·색인을 시작하지 못합니다. RAG 프로세스 시작과 답변 준비를 구분하고 backend는 초기 색인을 요청할 수 있어야 합니다.
+
+설정이 주입된 RAG 컨테이너 내부에서는 `python -m app.preflight --target docker --service rag`로 검사할 수 있습니다. 이 모드는 RAG에 필요 없는 DB 계정·시연 비밀번호를 요구하지 않습니다. 컨테이너의 같은 볼륨 연결과 실제 네트워크는 Compose/E2E에서 별도로 검증합니다.
+
 ## 실제 서비스 실행
 
 루트 `.env.example`을 참고해 **루트 `.env` 한 곳**에 backend/RAG 공통 값을 설정합니다. 실제 비밀값은 Git에 넣지 않습니다. RAG 전용 항목은 `rag/.env.example`에 정리했습니다.
@@ -72,7 +96,7 @@ python -m uvicorn app.bootstrap:create_service --factory \
 
 Docker에서는 내부 네트워크 접근을 위해 `--host 0.0.0.0`을 사용합니다. Java의 `RAG_URL`은 실행 위치에 맞춰 `http://localhost:8001` 또는 `http://rag:8001`로 설정합니다. 브라우저는 Java API만 호출합니다.
 
-실행 순서는 RAG → Java → 본사 로그인·문서 업로드·승인 → 색인 성공 확인 → 배포 → 점주 질문입니다. 최초 색인 전 health는 503입니다. 설정·유효한 산출물이 준비되면 200이며, health가 외부 제공자의 인증·답변 품질까지 검증하지는 않습니다. 모델 설정이 없으면 질문은 503, 임베딩 설정이 없으면 색인은 `EMBEDDING_NOT_CONFIGURED`로 실패합니다.
+실행 순서는 RAG → Java → 본사 로그인·문서 업로드·승인 → 색인 성공 확인 → 배포 → 점주 질문입니다. 레시피 시연 자료는 manifest의 `document_id=demo-cafe-recipes`로 등록해 구조화 JSON과 연결합니다. 최초 색인 전 health는 503입니다. 설정·유효한 산출물이 준비되면 200이며, health가 외부 제공자의 인증·답변 품질까지 검증하지는 않습니다. 모델 설정이 없으면 질문은 503, 임베딩 설정이 없으면 색인은 `EMBEDDING_NOT_CONFIGURED`로 실패합니다.
 
 ## 검색과 색인 경계
 

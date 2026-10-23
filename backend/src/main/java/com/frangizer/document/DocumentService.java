@@ -366,13 +366,13 @@ public class DocumentService {
                         .param("j", jobId).param("v", verId).param("now", Api.now()).update();
             });
             syncJob(jobId); // RAG가 꺼져 있어도 승인은 유지한다. 작업 조회 때 다시 제출한다.
-            String status = db.sql("SELECT status FROM index_jobs WHERE job_id = :j").param("j", jobId)
+            String status = db.sql("SELECT index_status FROM document_versions WHERE version_id = :v").param("v", verId)
                     .query(String.class).single();
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("document_id", docId);
             data.put("version_id", verId);
             data.put("lifecycle", "approved");
-            data.put("index_status", "running".equals(status) ? "running" : "queued");
+            data.put("index_status", status);
             data.put("job_id", jobId);
             return ResponseEntity.status(HttpStatus.ACCEPTED).body((Object) Api.ok(data));
         });
@@ -412,9 +412,11 @@ public class DocumentService {
      * 같은 작업의 현재 상태가 돌아온다. ponytail: 프론트 폴링(2초)이 동기화 주기. 백그라운드 워커가 필요하면 @Scheduled로 옮긴다.
      */
     private void syncJob(String jobId) {
-        String jobStatus = db.sql("SELECT status FROM index_jobs WHERE job_id = :j").param("j", jobId)
-                .query(String.class).single();
-        if (Set.of("succeeded", "failed").contains(jobStatus)) return;
+        Map<String, Object> job = db.sql("SELECT status, attempt FROM index_jobs WHERE job_id = :j").param("j", jobId)
+                .query((rs, n) -> Map.<String, Object>of("status", rs.getString("status"), "attempt", rs.getInt("attempt")))
+                .single();
+        if (Set.of("succeeded", "failed").contains(job.get("status"))) return;
+        int attempt = (int) job.get("attempt");
         Map<String, Object> v = db.sql(VERSION_SQL + "JOIN index_jobs j ON j.version_id = v.version_id WHERE j.job_id = :j")
                 .param("j", jobId).query(versionMapper()).single();
 
@@ -423,7 +425,7 @@ public class DocumentService {
         source.put("sha256", v.get("sha256"));
         source.put("media_type", v.get("media_type"));
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("job_id", jobId);
+        body.put("job_id", attempt == 0 ? jobId : jobId + "-r" + attempt); // RAG는 job_id별로 한 번만 실행한다
         for (String k : List.of("brand_id", "document_id", "version_id", "title", "version", "category",
                 "material_type", "is_demo", "visibility")) {
             body.put(k, v.get(k));
@@ -436,28 +438,47 @@ public class DocumentService {
         JsonNode data;
         try {
             data = rag.submitIndexJob(body);
+        } catch (RagClient.Rejected e) {
+            // 같은 요청은 다시 보내도 거부된다. 실패로 확정하고, 고친 내용은 새 판본·새 job_id로 색인한다.
+            log.warn("index job rejected job_id={} error={}", jobId, e.getMessage());
+            record(jobId, (String) v.get("version_id"), "failed", 0, null, "VALIDATION_ERROR", e.getMessage());
+            return;
         } catch (RuntimeException e) {
+            // 연결 장애·타임아웃 등 일시 실패: 상태를 그대로 두고 다음 조회 때 다시 제출한다.
             log.warn("index job submit failed job_id={} error={}", jobId, e.getMessage());
             return;
         }
         String status = data.path("status").asString("queued");
         if (!Set.of("queued", "running", "succeeded", "failed").contains(status)) return;
-        String indexStatus = switch (status) {
-            case "succeeded" -> "ready";
-            case "failed" -> "failed";
-            default -> status;
-        };
-        String revision = data.path("index_revision").isString() ? data.path("index_revision").asString() : null;
+        String errorCode = data.path("error_code").isString() ? data.path("error_code").asString() : null;
+        if ("failed".equals(status) && "INTERRUPTED".equals(errorCode) && attempt < MAX_INTERRUPTED_RETRIES) {
+            // RAG 재시작으로 중단됐을 뿐 내용 문제는 아니다. 공개 job_id는 유지하고 다음 조회 때 새 RAG job_id로 다시 제출한다.
+            log.warn("index job interrupted job_id={} attempt={}", jobId, attempt);
+            db.sql("UPDATE index_jobs SET attempt = attempt + 1 WHERE job_id = :j").param("j", jobId).update();
+            record(jobId, (String) v.get("version_id"), "queued", 0, null, null, null);
+            return;
+        }
+        record(jobId, (String) v.get("version_id"), status, data.path("chunk_count").asInt(0),
+                data.path("index_revision").isString() ? data.path("index_revision").asString() : null,
+                errorCode,
+                data.path("error_message").isString() ? data.path("error_message").asString() : null);
+    }
+
+    /** RAG가 계속 재시작되면 무한 재제출하지 않도록 상한을 둔다. 넘으면 failed/INTERRUPTED로 남는다. */
+    private static final int MAX_INTERRUPTED_RETRIES = 3;
+
+    private void record(String jobId, String versionId, String status, int chunkCount, String revision,
+                        String errorCode, String errorMessage) {
+        String indexStatus = "succeeded".equals(status) ? "ready" : status;
         tx.executeWithoutResult(s -> {
             db.sql("""
                     UPDATE index_jobs SET status = :s, chunk_count = :c, index_revision = :r, error_code = :ec,
                       error_message = :em, updated_at = :now WHERE job_id = :j""")
-                    .param("s", status).param("c", data.path("chunk_count").asInt(0)).param("r", revision)
-                    .param("ec", data.path("error_code").isString() ? data.path("error_code").asString() : null)
-                    .param("em", data.path("error_message").isString() ? data.path("error_message").asString() : null)
+                    .param("s", status).param("c", chunkCount).param("r", revision)
+                    .param("ec", errorCode).param("em", errorMessage)
                     .param("now", Api.now()).param("j", jobId).update();
             db.sql("UPDATE document_versions SET index_status = :is, index_revision = :r WHERE version_id = :v")
-                    .param("is", indexStatus).param("r", revision).param("v", v.get("version_id")).update();
+                    .param("is", indexStatus).param("r", revision).param("v", versionId).update();
         });
     }
 

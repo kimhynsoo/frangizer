@@ -3,6 +3,9 @@ package com.frangizer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -12,10 +15,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 import java.nio.charset.StandardCharsets;
 import java.time.DayOfWeek;
+import java.util.Map;
 import java.time.LocalDate;
 import java.time.temporal.TemporalAdjusters;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -70,6 +75,85 @@ class ApiContractTest {
         assertThat(body(r).at("/error/details/0/field").asString()).isEqualTo("role");
         // owner는 본사 집계 불가
         assertThat(call(get("/api/v1/analytics/questions"), owner).getResponse().getStatus()).isEqualTo(403);
+    }
+
+    @Test
+    void indexValidationRejectionIsFinal() throws Exception {
+        String hq = login("demo-hq-01");
+        String meta = """
+                {"document_id":"test-rejected","title":"합성 거부 문서","version":"1.0","category":"recipe",
+                 "material_type":"synthetic","is_demo":true,"visibility":"owner",
+                 "effective_from":"2026-01-01T00:00:00+09:00","change_summary":"최초",
+                 "original_source":{"title":"합성","url":null,"edition":"1.0","publisher":"프로젝트 팀",
+                   "acquired_on":"2026-10-23","note":"합성 데이터"},
+                 "indexing_policy":{"exclude_pages":[],"legal_temporal_reviewed":false}}""";
+        call(multipart("/api/v1/documents")
+                .file(new MockMultipartFile("file", "r.md", "text/markdown", "# 문서".getBytes(StandardCharsets.UTF_8)))
+                .file(new MockMultipartFile("metadata", "", "application/json", meta.getBytes(StandardCharsets.UTF_8)))
+                .header("Idempotency-Key", "key-upload-rej1"), hq);
+        String base = "/api/v1/documents/test-rejected/versions/test-rejected-1.0";
+
+        // RAG 422 → 작업·판본 모두 failed(VALIDATION_ERROR), 이후 조회에서 재제출하지 않는다
+        when(rag.submitIndexJob(any())).thenThrow(new RagClient.Rejected("exclude_pages 범위 오류"));
+        JsonNode approval = body(call(post(base + "/approve").header("Idempotency-Key", "key-approve-rej1")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"review_note\":\"검수\"}"), hq));
+        assertThat(approval.at("/data/index_status").asString()).isEqualTo("failed");
+        JsonNode job = body(call(get("/api/v1/index-jobs/" + approval.at("/data/job_id").asString()), hq));
+        assertThat(job.at("/data/status").asString()).isEqualTo("failed");
+        assertThat(job.at("/data/error_code").asString()).isEqualTo("VALIDATION_ERROR");
+        assertThat(job.at("/data/error_message").asString()).isEqualTo("exclude_pages 범위 오류");
+        verify(rag, times(1)).submitIndexJob(any());
+
+        // 일시 장애는 queued로 남아 다음 조회 때 다시 제출된다(별도 문서로 확인)
+        call(multipart("/api/v1/documents")
+                .file(new MockMultipartFile("file", "r.md", "text/markdown", "# 문서".getBytes(StandardCharsets.UTF_8)))
+                .file(new MockMultipartFile("metadata", "", "application/json",
+                        meta.replace("test-rejected", "test-transient").getBytes(StandardCharsets.UTF_8)))
+                .header("Idempotency-Key", "key-upload-tr01"), hq);
+        reset(rag);
+        when(rag.submitIndexJob(any())).thenThrow(new com.frangizer.common.ApiException(
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE", "x"));
+        JsonNode transient_ = body(call(post("/api/v1/documents/test-transient/versions/test-transient-1.0/approve")
+                .header("Idempotency-Key", "key-approve-tr01").contentType(MediaType.APPLICATION_JSON).content("{\"review_note\":\"검수\"}"), hq));
+        assertThat(transient_.at("/data/index_status").asString()).isEqualTo("queued");
+        reset(rag);
+        when(rag.submitIndexJob(any())).thenReturn(json.readTree("{\"status\":\"running\",\"chunk_count\":0}"));
+        assertThat(body(call(get("/api/v1/index-jobs/" + transient_.at("/data/job_id").asString()), hq))
+                .at("/data/status").asString()).isEqualTo("running");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void interruptedIndexIsResubmittedUnderSameJob() throws Exception {
+        String hq = login("demo-hq-01");
+        String meta = """
+                {"document_id":"test-interrupted","title":"합성 중단 문서","version":"1.0","category":"recipe",
+                 "material_type":"synthetic","is_demo":true,"visibility":"owner",
+                 "effective_from":"2026-01-01T00:00:00+09:00","change_summary":"최초",
+                 "original_source":{"title":"합성","url":null,"edition":"1.0","publisher":"프로젝트 팀",
+                   "acquired_on":"2026-10-23","note":"합성 데이터"},
+                 "indexing_policy":{"exclude_pages":[],"legal_temporal_reviewed":false}}""";
+        call(multipart("/api/v1/documents")
+                .file(new MockMultipartFile("file", "r.md", "text/markdown", "# 문서".getBytes(StandardCharsets.UTF_8)))
+                .file(new MockMultipartFile("metadata", "", "application/json", meta.getBytes(StandardCharsets.UTF_8)))
+                .header("Idempotency-Key", "key-upload-int1"), hq);
+
+        // RAG 재시작으로 중단 → 판본은 queued로 돌아가고, 다음 조회 때 같은 공개 job_id 아래 새 RAG job_id로 재제출
+        when(rag.submitIndexJob(any())).thenReturn(json.readTree(
+                "{\"status\":\"failed\",\"chunk_count\":0,\"error_code\":\"INTERRUPTED\"}"));
+        JsonNode approval = body(call(post("/api/v1/documents/test-interrupted/versions/test-interrupted-1.0/approve")
+                .header("Idempotency-Key", "key-approve-int1").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"review_note\":\"검수\"}"), hq));
+        assertThat(approval.at("/data/index_status").asString()).isEqualTo("queued");
+        String jobId = approval.at("/data/job_id").asString();
+
+        when(rag.submitIndexJob(any())).thenReturn(json.readTree(
+                "{\"status\":\"succeeded\",\"chunk_count\":3,\"index_revision\":\"rev-2\"}"));
+        assertThat(body(call(get("/api/v1/index-jobs/" + jobId), hq)).at("/data/status").asString()).isEqualTo("succeeded");
+        ArgumentCaptor<Object> sent = ArgumentCaptor.forClass(Object.class);
+        verify(rag, times(2)).submitIndexJob(sent.capture());
+        assertThat(((Map<String, Object>) sent.getAllValues().get(0)).get("job_id")).isEqualTo(jobId);
+        assertThat(((Map<String, Object>) sent.getAllValues().get(1)).get("job_id")).isEqualTo(jobId + "-r1");
     }
 
     @Test

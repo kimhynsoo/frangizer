@@ -53,12 +53,36 @@ public class RagClient {
                 .retrieve().body(JsonNode.class));
     }
 
-    /** POST /internal/v1/index-jobs → IndexJob(data). job_id가 멱등키라 같은 내용으로 재호출해도 안전하다. */
+    /**
+     * POST /internal/v1/index-jobs → IndexJob(data). job_id가 멱등키라 같은 내용으로 재호출해도 안전하다.
+     * 422는 같은 요청을 다시 보내도 같은 결과라 {@link Rejected}로 구분한다(일시 장애와 달리 재시도 금지).
+     */
     public JsonNode submitIndexJob(Object body) {
-        return call(() -> http.post().uri("/internal/v1/index-jobs")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(body)
-                .retrieve().body(JsonNode.class));
+        return call(() -> {
+            try {
+                return http.post().uri("/internal/v1/index-jobs")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(body)
+                        .retrieve().body(JsonNode.class);
+            } catch (RestClientResponseException e) {
+                if (e.getStatusCode().value() != 422) throw e;
+                JsonNode err = null;
+                try {
+                    err = e.getResponseBodyAs(JsonNode.class);
+                } catch (RuntimeException ignored) {
+                    // 본문이 JSON이 아니어도 422 자체로 판정한다
+                }
+                String message = err == null ? "" : err.path("error").path("message").asString("");
+                throw new Rejected(message.isEmpty() ? "색인 요청 검증에 실패했습니다." : message);
+            }
+        });
+    }
+
+    /** RAG가 요청 자체를 거부(422 VALIDATION_ERROR, retryable=false). */
+    public static class Rejected extends RuntimeException {
+        public Rejected(String message) {
+            super(message);
+        }
     }
 
     private static JsonNode call(Supplier<JsonNode> request) {
