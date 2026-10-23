@@ -38,6 +38,7 @@ services:
       JWT_AUDIENCE: ${JWT_AUDIENCE:-frangizer-api}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:?.env에 INTERNAL_TOKEN 값을 넣으세요}
       RAG_URL: http://rag:8001
+      VOICE_URL: http://voice:8008   # optional profile; /stt returns 503 when voice is not running
       DOCUMENT_STORE_DIR: /var/lib/frangizer
       DEMO_PASSWORD: ${DEMO_PASSWORD:?.env에 DEMO_PASSWORD 값을 넣으세요}
       # Same origin through nginx, so no CORS origins are needed in the deployed stack
@@ -107,10 +108,9 @@ services:
     build:
       context: ./voice
     environment:
+      # Only the Java gateway calls voice (it already checked the user's JWT)
       WHISPER_MODEL: ${WHISPER_MODEL:-small}
-      JWT_SECRET: ${JWT_SECRET:?.env에 JWT_SECRET (32바이트 이상) 값을 넣으세요}
-      JWT_ISSUER: ${JWT_ISSUER:-frangizer}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-frangizer-api}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?.env에 INTERNAL_TOKEN 값을 넣으세요}
     volumes:
       - whisper_cache:/root/.cache/huggingface
     restart: unless-stopped
