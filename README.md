@@ -133,14 +133,25 @@ flowchart TB
 
 ## 데이터
 
-| 자료 | 성격 (`material_type`) | 용도 |
-| --- | --- | --- |
-| 식품위생법 | 법령 (`official`) | 영업·교육·위생 질문의 근거 |
-| 가맹사업거래의 공정화에 관한 법률 | 법령 (`official`) | 가맹 준비, 본사·가맹점 거래 관련 근거 |
-| 소비자분쟁해결기준 | 고시 (`official`) | 고객 불만·교환·환급 기준 |
-| 빽다방 공개 정보공개서 (2025-11-21 등록, 59쪽) | 원본 (`public_disclosure`) | 가맹점 부담 비용, 입지, 개점 절차, 교육 조건 |
-| 합성 카페 표준 레시피 v1.0 (6개 메뉴) | 합성 (`synthetic`) | 계량·제조 순서·옵션 Q&A |
-| 합성 카페 표준 레시피 v1.1 | 합성 (`synthetic`) | 바닐라 시럽 20→15 mL 변경, 신메뉴 허니자몽블랙티 추가. 적용일 2026-10-26, 배포 시연용 |
+원본 파일은 `data/source/`(자동 적재 대상)와 `data/staged/`(미배포, 자동 적재 금지)에 있고, 판본·쪽수·색인 제외 쪽·적용일은 [`data/manifest.json`](data/manifest.json)에 기록합니다. 판본은 법령·고시의 경우 PDF 머리글의 시행일, 합성 자료의 경우 문서 판본입니다.
+
+| 분야 | 자료 | 성격 (`material_type`) | 판본 | 쪽수 | 용도 |
+| --- | --- | --- | --- | --- | --- |
+| 위생 | 식품위생법 | 법령 (`official`) | 2026-10-08 | 76 | 영업·교육·위생 질문의 근거 |
+| 위생 | 식품위생법 시행령 | 법령 (`official`) | 2026-08-18 | 28 | 위생 세부 기준 |
+| 위생 | 식품위생법 시행규칙 | 법령 (`official`) | 2026-09-01 | 73 | 위생교육·영업 세부 절차 |
+| 가맹 | 가맹사업거래의 공정화에 관한 법률 | 법령 (`official`) | 2026-10-02 | 36 | 가맹 준비, 본사·가맹점 거래 관련 근거 |
+| 가맹 | 가맹사업법 시행령 | 법령 (`official`) | 2026-08-04 | 23 | 가맹 거래 세부 기준 |
+| 가맹 | 가맹사업법 시행령 [별표 2] 불공정거래행위의 유형 또는 기준 | 법령 (`official`) | 2028-01-01 | 6 | 불공정거래 유형. 수록된 별표는 2024-06-04 개정본이라 적용일을 2024-06-04로 둠 |
+| 가맹 | 가맹분야 불공정거래행위 심사지침 | 고시 (`official`) | 2024-03-25 | 44 | 추가 요구·불공정 여부 판단 기준 |
+| 가맹 | 빽다방 정보공개서 (대외 공개용) | 원본 (`public_disclosure`) | 2025-11-21 | 59 | 가맹점 부담 비용, 입지, 개점 절차, 교육 조건 |
+| 가맹 | 가맹카페 A 가맹계약서 (합성) | 합성 (`synthetic`) | v1.0 | 10 | 계약 조건 시연. 적용일·사용 여부는 팀 합의 중 |
+| 소비자 | 소비자기본법 | 법령 (`official`) | 2026-09-11 | 27 | 소비자 권리·분쟁 일반 원칙 |
+| 소비자 | 소비자분쟁해결기준 | 고시 (`official`) | 2025-12-18 | 2 | 고객 불만·교환·환급 기준 |
+| 소비자 | 소비자분쟁해결기준 별표 | 고시 (`official`) | 2025-12-18 | 145 | 품목·업종별 해결 기준 |
+| 소비자 | 전자상거래법 (청약철회 관련 발췌) | 법령 (`official`) | 2026-07-21 | 6 | 배달·온라인 주문의 청약철회 |
+| 레시피 | 카페 표준 레시피 북 (합성) | 합성 (`synthetic`) | v1.0 | 8 | 6개 메뉴의 계량·제조 순서·옵션 Q&A |
+| 레시피 | 카페 표준 레시피 북 (합성) — `staged` | 합성 (`synthetic`) | v1.1 | 10 | 바닐라 시럽 20→15 mL 변경, 신메뉴 허니자몽블랙티 추가. 적용일 2026-10-26, 배포 시연용 |
 
 - 정보공개서는 이름·수치·쪽수를 바꾸지 않고 원본 그대로 사용합니다. 수집본 기준이며 현재 실제 계약 조건을 보장하지 않습니다.
 - 합성 레시피는 실제 브랜드의 제조법이 아닙니다. 모든 답변 출처에 합성 자료임을 표시합니다.
@@ -187,23 +198,113 @@ frangizer/
 
 ## 실행 방법
 
-> 구현이 진행되면 이 절을 갱신합니다. 목표 실행 방식은 다음과 같습니다.
+> `backend/`, `rag/`, `frontend/`를 Docker Compose 한 번으로 실행합니다. 구현이 진행되면 이 절을 갱신합니다.
+
+**준비물:** Docker Desktop(Compose v2), `.env`에 넣을 값(JWT 서명키, 내부 토큰, LLM API 키, DB 비밀번호, 시연 계정 비밀번호)
+
+### 1. 환경변수 준비
 
 ```bash
 cp .env.example .env
 ```
 
+`.env`의 값은 직접 채우며 **커밋하지 않습니다.** 변수는 서비스마다 필요한 것이 다릅니다.
+
+| 변수 | 사용처 | 설명 |
+| --- | --- | --- |
+| `JWT_SECRET` | backend, rag, voice | JWT 서명키. **32바이트 이상**, 세 서비스가 같은 값 사용 |
+| `JWT_ISSUER`, `JWT_AUDIENCE` | backend, rag, voice | 기본 `frangizer`, `frangizer-api` |
+| `INTERNAL_TOKEN` | backend, rag | 서비스 간 호출용 비밀 (`X-Internal-Token`) |
+| `DB_USERNAME`, `DB_PASSWORD` | db, backend | MariaDB 앱 사용자(기본 `frangizer`)와 비밀번호. Compose가 같은 값으로 사용자를 만듭니다 |
+| `DEMO_PASSWORD` | backend | 시연 계정 비밀번호. **비어 있으면 로그인할 수 없습니다** |
+| `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL` | rag | 외부 모델 설정. 비어 있어도 서비스는 뜨지만 질문은 `503`, 색인은 `EMBEDDING_NOT_CONFIGURED`로 실패합니다. 임베딩 모델은 `text-embedding-3-small` 또는 `-large`이며, 바꾸면 전체를 다시 색인합니다 |
+| `EMBEDDING_API_KEY`, `EMBEDDING_DIMENSIONS`, `EMBEDDING_BASE_URL` | rag | 선택. 비우면 `LLM_API_KEY`와 모델 기본 차원을 씁니다 |
+| `DB_URL`, `RAG_URL`, `CORS_ALLOWED_ORIGINS` | backend | 로컬 `bootRun`용 값. Compose에서는 서비스 이름(`db`, `rag`)으로 자동 대체됩니다 |
+| `DOCUMENT_STORE_DIR`, `FAISS_DIR` | backend, rag | 볼륨 안 저장 경로. 기본값 사용 |
+| `DB_NAME`, `WEB_PORT`, `WHISPER_MODEL` | db, web, voice | 선택. 기본 `frangizer`, `80`, `small` |
+
+시연 계정은 `demo-hq-01`(본사), `demo-owner-a001`~`demo-owner-a012`(운영 점주), `demo-prospect-01`(예비 점주)이며, 비밀번호는 모두 `DEMO_PASSWORD` 값입니다.
+
+### 2. 기동
+
+기본 구성은 **db + backend + rag + web**입니다.
+
 ```bash
 docker compose up -d --build
 ```
 
-| 서비스 | 주소 |
-| --- | --- |
-| 웹 | http://localhost |
-| Java API (개발) | http://localhost:8080/api/v1 |
-| 상태 확인 | http://localhost/api/v1/health |
+기동 순서는 `db → backend·rag → web`입니다. 서비스마다 헬스체크가 있어 앞 서비스가 준비된 뒤에 다음 서비스가 시작됩니다. 처음 빌드는 Gradle·npm·Python 의존성을 받느라 몇 분 걸립니다. `.env`에 필수 값(`DB_PASSWORD`, `JWT_SECRET`, `INTERNAL_TOKEN`, `DEMO_PASSWORD`)이 비어 있으면 컨테이너를 띄우기 전에 안내 메시지를 내고 멈춥니다.
 
-필요한 환경변수: `JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE`, `INTERNAL_TOKEN`, `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL`, DB 접속 정보. 실제 값은 `.env`에만 넣고 커밋하지 않습니다.
+음성 서비스(STT)는 선택이며 `voice` 프로필로 추가합니다. 첫 요청 때 Whisper 모델을 내려받습니다.
+
+```bash
+docker compose --profile voice up -d --build
+```
+
+상태 확인:
+
+```bash
+docker compose ps
+```
+
+네 서비스가 `running`이고 db·backend·rag가 `(healthy)`이면 준비된 것입니다. rag는 모델 설정과 첫 색인 전에도 서버가 응답하면 `healthy`로 표시됩니다(내부 `/health`는 이때 `503 not_ready`). 실패하면 로그를 봅니다.
+
+```bash
+docker compose logs --tail 50 backend
+```
+
+**문서 색인:** 질문에 답하려면 문서가 색인돼 있어야 합니다. 본사 계정으로 문서를 등록 → 승인(색인) → 배포합니다. 화면의 문서 관리에서 하거나, `scripts/seed_documents.py`로 `data/source/` 원본을 한 번에 등록할 수 있습니다(PR #6 병합 후 사용 가능, 사용법은 스크립트 상단 주석).
+
+### 3. 동작 확인
+
+브라우저에서 http://localhost 에 접속해 시연 계정(예: `demo-owner-a001`)과 `DEMO_PASSWORD`로 로그인합니다.
+
+스크립트로 확인할 때는 다음을 실행합니다. 비밀번호는 `.env`의 `DEMO_PASSWORD`를 자동으로 읽습니다.
+
+```bash
+./scripts/smoke.sh http://localhost
+```
+
+웹·API 상태, 토큰 없는 접근 거부(401), 로그인, `/me`, `/rag-query`를 순서대로 점검합니다. `/rag-query`는 모델 설정과 문서 색인이 끝나야 `200`입니다. 그 전에는 `SKIP_RAG=1 ./scripts/smoke.sh http://localhost`로 질문 항목을 건너뜁니다. 계정을 바꾸려면 `./scripts/smoke.sh <주소> <아이디> <비밀번호>`로 넘깁니다.
+
+| 서비스 | 주소 | 외부 공개 |
+| --- | --- | --- |
+| 웹 | http://localhost | O |
+| API (Nginx 경유) | http://localhost/api/v1 | O |
+| 상태 확인 | http://localhost/api/v1/health | O |
+| backend · rag · voice · db | 컨테이너 내부 네트워크 전용 | X |
+
+### 4. 개발용 실행
+
+서비스를 직접 호출하며 개발할 때는 개발용 Compose를 겹쳐서 사용합니다. 내부 포트가 `127.0.0.1`에만 열립니다. **시연·배포에는 사용하지 않습니다.**
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+| 서비스 | 개발용 주소 |
+| --- | --- |
+| backend (Java API) | http://localhost:8080/api/v1 |
+| rag | http://localhost:8001 |
+| voice | http://localhost:8008 |
+| db | 127.0.0.1:3306 |
+
+### 5. 종료와 초기화
+
+```bash
+docker compose down        # 컨테이너 종료 (DB·인덱스 유지)
+docker compose down -v     # 컨테이너와 볼륨(DB, FAISS 인덱스, 업로드 문서) 삭제
+```
+
+### 참고
+
+- 문서는 backend 업로드·승인을 거쳐서만 RAG에 들어갑니다. `data/source/`, `data/staged/`(미배포 판본), `eval/`, `docs/`는 컨테이너에 연결하지 않으며 자동 적재하지 않습니다. 구조화 레시피(`data/structured/`)만 읽기 전용으로 연결됩니다.
+- 업로드 문서, FAISS 인덱스, 질의 결과(SQLite)는 `frangizer_data` 볼륨(`/var/lib/frangizer`)에 저장되며, backend가 저장한 문서를 rag가 같은 볼륨에서 읽어 색인합니다. 저장소에는 커밋하지 않습니다.
+- 웹 이미지는 실제 API에 연결되도록 `VITE_USE_MOCK=false`로 빌드됩니다. 프론트를 샘플 데이터로만 보려면 `frontend/`에서 개발 서버를 따로 실행합니다.
+- Docker로 띄운 backend에는 아직 Swagger 스펙(`docs/api`)이 포함되지 않습니다(빌드 범위 조정 예정).
+- `voice` 프로필은 `voice/`에 `Dockerfile`이 생긴 뒤에 사용할 수 있습니다.
+- `.env`의 비밀번호를 바꾼 뒤에는 `docker compose down -v`로 DB를 초기화해야 반영됩니다. MariaDB는 처음 만들어질 때만 사용자를 만듭니다.
+- 80번 포트가 이미 쓰이고 있으면 `.env`의 `WEB_PORT`를 바꿉니다(예: `WEB_PORT=8088` → http://localhost:8088).
 
 ## 평가 계획
 
