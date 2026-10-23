@@ -56,11 +56,13 @@ def test_sum_check(review, raw):
 
 
 def test_apply_marks_only_covered_pages(review, raw):
+    for t in review["tables"]:          # 29쪽을 표시 해제 쪽에서 빼면(그 쪽 표를 다 옮기지 못한 경우) 그대로 남는다
+        t["covers"] = [n for n in t.get("covers", t["pages"]) if n != 29]
     pages, _ = extract_pdf(PAIK, {19, 20, 21, 29, 30})
     summary = apply_reviews(pages, raw, review)
     flags = {p.page: p.flags for p in pages}
     assert "table_reviewed" in flags[20] and "table_needs_review" not in flags[20]
-    assert "table_needs_review" in flags[29]  # 옮기지 못한 표(계열회사)가 남은 쪽은 그대로
+    assert "table_needs_review" in flags[29]
     p20 = next(p for p in pages if p.page == 20)
     assert p20.lines[0].startswith(REVIEW_MARK)
     assert "- 인테리어 (점포 내장공사): 지급대상자 협력업체 · 금액 16,720" in "\n".join(p20.lines)
@@ -117,3 +119,20 @@ def test_key_disclosure_tables_present(review):
     assert "매출액 388,087,962" in text                                       # 재무 현황
     assert "- 전체: 2024년말가맹점수 1712 · 연간 평균매출액 324,486" in text      # 평균 매출액
     assert "권장가격 3,700" in text                                            # 메뉴 권장가격
+    assert "- 매월: 로열티 275 · 비고 익월 5일 내 납부" in text                    # 로열티(별첨 1-3)
+
+
+def test_all_documents_reviews_valid():
+    """정보공개서 외 문서(분쟁 별표·계약서·법령의 본문 줄 상자) 기록도 원문과 맞는다."""
+    data = json.loads(REVIEWS.read_text(encoding="utf-8"))
+    for doc in data["documents"]:
+        pdf = pymupdf.open(REPO / "data" / doc["path"])
+        assert hashlib_sha(REPO / "data" / doc["path"]) == doc["sha256"], doc["path"]
+        raw = {i + 1: p.get_text() for i, p in enumerate(pdf)}
+        for t in doc["tables"]:
+            assert validate(t, raw) == [], (doc["local_key"], t["pages"])
+
+
+def hashlib_sha(path):
+    import hashlib
+    return hashlib.sha256(path.read_bytes()).hexdigest()

@@ -40,7 +40,7 @@ def test_chunks_keep_pairs_and_flags(make_request, roots, embedder):
         assert r["review"]["legal_temporal_reviewed"] is False
     by_page = {r["metadata"]["page"]: r["review"]["quality_flags"] for r in recs}
     assert "table_rows_paired" in by_page[122]
-    assert "table_needs_review" in by_page[2]  # 품목 목록 표는 짝을 못 지어 검수 필요로 남음
+    assert "table_reviewed" in by_page[2]  # 품목 목록 표는 짝짓기 대상이 아니고 표 JSON(table_reviews.json)으로 들어감
     parts = [r for r in recs if r["section"]["parent_section_key"] == "p121"]
     assert [r["section"]["part"] for r in parts] == list(range(1, parts[0]["section"]["parts"] + 1))
 
