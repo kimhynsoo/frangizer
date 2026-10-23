@@ -1,0 +1,3046 @@
+openapi: 3.1.0
+info:
+  title: 가맹파트너 AI 공개 API
+  version: 1.0.0
+  description: 2026-10-23 개발 계약. 서버 구현 완료를 뜻하지 않는다. 규범적 동작은 API_명세서.md 참조.
+servers:
+- url: http://localhost:8080/api/v1
+  description: Java 개발 서버
+- url: /api/v1
+  description: Nginx 동일 출처 배포
+security:
+- BearerAuth: []
+paths:
+  /login:
+    post:
+      operationId: login
+      summary: 로그인·JWT 발급
+      tags:
+      - 인증
+      description: 로그인·JWT 발급
+      parameters: []
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                accessToken: DEMO_TOKEN_REPLACE_WITH_REAL_JWT
+                token_type: Bearer
+                expires_in: 3600
+                user:
+                  id: user-demo-01
+                  username: demo-owner-a001
+                  role: owner
+                  brand_id: brand-demo-a
+                  store_id: demo-store-01
+                  region_code: SEOUL
+                  permissions:
+                  - rag:ask
+                request_id: req-login-001
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles: []
+      x-permissions: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      security: []
+  /me:
+    get:
+      operationId: getMe
+      summary: 현재 사용자·역할·권한
+      tags:
+      - 인증
+      description: 현재 사용자·역할·권한
+      parameters: []
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+                  request_id: &id001
+                    type: string
+                    description: 서버 발급 불투명 식별자
+                    minLength: 1
+                    maxLength: 100
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9._-]*$
+                required:
+                - data
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - prospect
+      - owner
+      - hq
+      x-permissions: []
+  /regions:
+    get:
+      operationId: listRegions
+      summary: 브랜드의 지역 필터 목록
+      tags:
+      - 기준정보
+      description: 브랜드의 지역 필터 목록
+      parameters:
+      - &id002
+        name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+        description: page
+      - &id003
+        name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+        description: page_size
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Region'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+                  request_id: *id001
+                required:
+                - data
+                - meta
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - hq
+      x-permissions:
+      - analytics:read
+  /stores:
+    get:
+      operationId: listStores
+      summary: 브랜드의 점포 필터 목록
+      tags:
+      - 기준정보
+      description: 브랜드의 점포 필터 목록
+      parameters:
+      - name: region_code
+        in: query
+        required: false
+        schema:
+          type: string
+        description: region_code
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Store'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+                  request_id: *id001
+                required:
+                - data
+                - meta
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - hq
+      x-permissions:
+      - analytics:read
+  /topics:
+    get:
+      operationId: listTopics
+      summary: 통제된 질문 주제 목록
+      tags:
+      - 기준정보
+      description: 통제된 질문 주제 목록
+      parameters:
+      - name: category
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/Category'
+        description: category
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Topic'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+                  request_id: *id001
+                required:
+                - data
+                - meta
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - hq
+      x-permissions:
+      - analytics:read
+  /rag-query:
+    post:
+      operationId: askQuestion
+      summary: 점주 문서 질의·근거 답변
+      tags:
+      - 질문
+      description: Gateway가 질문 사건을 먼저 저장하고 권한·판본을 선택한 뒤 내부 RAG 호출. 근거 부족은 200, 시스템 장애는 5xx. source/top_k/사용자 범위
+        주입 금지.
+      parameters:
+      - &id004
+        name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 100
+        description: 호출자·operation별 24시간 보존. 재시도는 같은 키, 수정·새 작업은 새 키. 다른 본문은 409.
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/RagAnswer'
+                  request_id: *id001
+                required:
+                - data
+                - request_id
+              example:
+                data:
+                  question_id: q-demo-001
+                  conversation_id: conv-demo-001
+                  answer: 등록된 합성 레시피 v1.0 기준으로 바닐라 시럽 20 mL, 전용 펌프 4회입니다.
+                  steps:
+                  - 전용 펌프 1회는 5 mL입니다.
+                  status: answered
+                  needs_review: false
+                  handoff: false
+                  sources:
+                  - chunk_id: chunk-vanilla-iced-1.0
+                    document_id: demo-cafe-recipes
+                    version_id: demo-cafe-recipes-1.0
+                    title: 합성 카페 표준 레시피
+                    version: '1.0'
+                    location: PDF 5쪽 / 바닐라라테 ICED
+                    page: 5
+                    article: null
+                    effective_from: '2026-10-19T00:00:00+09:00'
+                    effective_until: null
+                    material_type: synthetic
+                    is_demo: true
+                    excerpt: 바닐라 시럽 20 mL와 에스프레소 60 mL를 별도 용기에서 섞는다.
+                    detail_url: /api/v1/documents/demo-cafe-recipes/versions/demo-cafe-recipes-1.0
+                    file_url: /api/v1/documents/demo-cafe-recipes/versions/demo-cafe-recipes-1.0/file
+                  follow_up_questions: []
+                  handoff_reason: null
+                  category: recipe
+                  topic_id: vanilla_syrup
+                  classification_status: classified
+                  as_of: '2026-10-23T10:00:00+09:00'
+                  basis: current
+                  latency_ms: 2100
+                request_id: req-rag-001
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+        '502':
+          $ref: '#/components/responses/Error502'
+        '503':
+          $ref: '#/components/responses/Error503'
+        '504':
+          $ref: '#/components/responses/Error504'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - prospect
+      - owner
+      - hq
+      x-permissions:
+      - rag:ask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskRequest'
+  /conversations/{conversation_id}:
+    get:
+      operationId: getConversation
+      summary: 본인 대화의 마스킹 기록
+      tags:
+      - 질문
+      description: 본인만 접근. 최대 최근 50문답. 보존기간 만료 시 404. 과거 기록 표시 전 현재 문서 권한 재검사.
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Conversation'
+                  request_id: *id001
+                required:
+                - data
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - prospect
+      - owner
+      - hq
+      x-permissions: []
+  /questions/{question_id}/feedback:
+    put:
+      operationId: putFeedback
+      summary: 본인 답변의 도움 여부 기록
+      tags:
+      - 질문
+      description: 마지막 평가로 교체하는 멱등 PUT. processing/system_error 사건에는 409. 실제 해결 상태를 바꾸지 않음.
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Feedback'
+                  request_id: *id001
+                required:
+                - data
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - prospect
+      - owner
+      - hq
+      x-permissions: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+  /documents:
+    get:
+      operationId: listDocuments
+      summary: 허용된 문서 계열·대표 판본 목록
+      tags:
+      - 문서
+      description: management=false는 질의 시점에 적용되는 배포 판본. true는 hq document:write 권한으로 초안 포함 최신 등록 판본. 판본 이력은 별도 API.
+      parameters:
+      - *id002
+      - *id003
+      - name: category
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/Category'
+        description: category
+      - name: as_of
+        in: query
+        required: false
+        schema: &id008
+          type: string
+          description: 시간대 필수 RFC3339 시각
+          format: date-time
+        description: as_of
+      - name: management
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+        description: management
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DocumentListItem'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+                  request_id: *id001
+                required:
+                - data
+                - meta
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - prospect
+      - owner
+      - hq
+      x-permissions: []
+    post:
+      operationId: uploadDocument
+      summary: 문서 또는 새 판본 등록
+      tags:
+      - 문서
+      description: multipart의 file + metadata JSON 문자열. 같은 계열 새 판본은 metadata.document_id 지정. 원본 바이트를 보존하며 색인은 승인
+        이후.
+      parameters:
+      - *id004
+      responses:
+        '201':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/DocumentVersion'
+                  request_id: *id001
+                required:
+                - data
+                - request_id
+              example:
+                data:
+                  document_id: demo-cafe-recipes
+                  version_id: demo-cafe-recipes-1.1
+                  brand_id: brand-demo-a
+                  title: 합성 카페 표준 레시피
+                  version: '1.1'
+                  category: recipe
+                  material_type: synthetic
+                  is_demo: true
+                  visibility: owner
+                  effective_from: '2026-10-26T00:00:00+09:00'
+                  lifecycle: draft
+                  index_status: not_started
+                  created_at: '2026-10-23T09:00:00+09:00'
+                  approved_at: null
+                  published_at: null
+                  change_summary: 바닐라 시럽 20→15 mL 변경 및 허니자몽블랙티 추가
+                  original_source:
+                    title: 합성 카페 표준 레시피
+                    url: null
+                    edition: '1.1'
+                    publisher: 프로젝트 팀
+                    acquired_on: '2026-10-23'
+                    note: 실제 브랜드 제조법이 아닌 합성 데이터
+                  indexing_policy:
+                    include_pages:
+                    - 2
+                    - 3
+                    - 4
+                    - 5
+                    - 6
+                    - 7
+                    - 8
+                    - 9
+                    exclude_pages:
+                    - 1
+                    legal_temporal_reviewed: false
+                  file_name: 합성_카페_레시피_v1.1.pdf
+                  media_type: application/pdf
+                  file_size_bytes: 52000
+                  sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                  page_count: 9
+                  file_url: /api/v1/documents/demo-cafe-recipes/versions/demo-cafe-recipes-1.1/file
+                  index_revision: null
+                request_id: req-upload-001
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+            Location:
+              schema:
+                type: string
+                format: uri-reference
+              description: 생성 판본 상세 URL
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '413':
+          $ref: '#/components/responses/Error413'
+        '415':
+          $ref: '#/components/responses/Error415'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - hq
+      x-permissions:
+      - document:write
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UploadRequest'
+            encoding:
+              file:
+                contentType: application/pdf, text/plain, text/markdown
+              metadata:
+                contentType: application/json
+  /documents/{doc_id}/versions:
+    get:
+      operationId: listDocumentVersions
+      summary: 허용된 판본 이력
+      tags:
+      - 문서
+      description: hq 관리 권한은 전체 상태, 그 외는 현재 권한에 허용된 published 판본만. 정렬 effective_from DESC, version_id DESC.
+      parameters:
+      - name: doc_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DocumentVersion'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+                  request_id: *id001
+                required:
+                - data
+                - meta
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - prospect
+      - owner
+      - hq
+      x-permissions: []
+  /documents/{doc_id}/versions/{ver_id}:
+    get:
+      operationId: getDocumentVersion
+      summary: 판본·본문 조각·출처 상세
+      tags:
+      - 문서
+      description: page/page_size는 sections에 적용. draft의 sections는 빈 목록일 수 있음. 미배포 판본은 hq 문서 관리 권한만 허용.
+      parameters:
+      - &id005
+        name: doc_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+      - &id006
+        name: ver_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+      - *id002
+      - *id003
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/DocumentDetail'
+                  request_id: *id001
+                required:
+                - data
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - prospect
+      - owner
+      - hq
+      x-permissions: []
+  /documents/{doc_id}/versions/{ver_id}/file:
+    get:
+      operationId: downloadDocument
+      summary: 권한 검증 후 원본 다운로드
+      tags:
+      - 문서
+      description: 브라우저는 Bearer로 fetch 후 Blob URL 사용. 토큰을 URL 쿼리에 넣지 않는다. MIME·파일명은 서버에서 안전하게 지정.
+      parameters:
+      - *id005
+      - *id006
+      responses:
+        '200':
+          description: 원본 바이트
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            X-Request-ID:
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            text/plain:
+              schema:
+                type: string
+                format: binary
+            text/markdown:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - prospect
+      - owner
+      - hq
+      x-permissions: []
+  /documents/{doc_id}/versions/{ver_id}/approve:
+    post:
+      operationId: approveDocument
+      summary: 검수 승인·비동기 색인 시작
+      tags:
+      - 문서
+      description: draft 또는 approved+failed만 허용. 새 키로 실패 색인 재시도 가능. 동일 키는 기존 job. 파일·권한·적용일은 승인 후 불변.
+      parameters:
+      - *id005
+      - *id006
+      - *id004
+      responses:
+        '202':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Approval'
+                  request_id: *id001
+                required:
+                - data
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - hq
+      x-permissions:
+      - document:approve
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRequest'
+  /index-jobs/{job_id}:
+    get:
+      operationId: getIndexJob
+      summary: 색인 작업 상태 조회
+      tags:
+      - 문서
+      description: 색인 작업 상태 조회
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/IndexJob'
+                  request_id: *id001
+                required:
+                - data
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+        '503':
+          $ref: '#/components/responses/Error503'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - hq
+      x-permissions:
+      - document:write
+  /documents/{doc_id}/versions/{ver_id}/publish:
+    post:
+      operationId: publishDocument
+      summary: 준비된 판본 배포·공지 생성
+      tags:
+      - 문서
+      description: approved+ready만 허용. 판본 배포·대상 점포 스냅샷·공지 생성은 하나의 DB 트랜잭션. 미래 적용 판본은 현재 기준을 바꾸지 않음.
+      parameters:
+      - *id005
+      - *id006
+      - *id004
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Publication'
+                  request_id: *id001
+                required:
+                - data
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - hq
+      x-permissions:
+      - document:publish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishRequest'
+  /notices:
+    get:
+      operationId: listNotices
+      summary: 본인 범위의 변경 공지
+      tags:
+      - 공지
+      description: owner는 배포 당시 대상 점포 공지. hq는 브랜드 범위 전체. hq에서 unread 필터는 422. 정렬 published_at DESC, notice_id DESC.
+      parameters:
+      - *id002
+      - *id003
+      - name: unread
+        in: query
+        required: false
+        schema: &id007
+          type: boolean
+        description: unread
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notice'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+                  request_id: *id001
+                required:
+                - data
+                - meta
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - owner
+      - hq
+      x-permissions: []
+  /notices/{notice_id}/ack:
+    put:
+      operationId: acknowledgeNotice
+      summary: 소속 점포의 공지 확인
+      tags:
+      - 공지
+      description: notice_id+store_id 유일. 최초 확인 시각·사용자를 보존하는 멱등 PUT. 본문 {}. store_id는 인증에서 결정.
+      parameters:
+      - name: notice_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Acknowledgement'
+                  request_id: *id001
+                required:
+                - data
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - owner
+      x-permissions: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyRequest'
+  /notices/{notice_id}/acknowledgements:
+    get:
+      operationId: listNoticeTargets
+      summary: 대상 점포의 확인·미확인 현황
+      tags:
+      - 공지
+      description: summary 분모는 지역 적용 후의 전체 대상 집합. acknowledged는 목록만 좁히며 summary 분모를 바꾸지 않음.
+      parameters:
+      - name: notice_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+      - *id002
+      - *id003
+      - name: acknowledged
+        in: query
+        required: false
+        schema: *id007
+        description: acknowledged
+      - name: region_code
+        in: query
+        required: false
+        schema:
+          type: string
+        description: region_code
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NoticeTarget'
+                  summary:
+                    $ref: '#/components/schemas/NoticeTargetSummary'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+                  request_id: *id001
+                required:
+                - data
+                - summary
+                - meta
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - hq
+      x-permissions:
+      - analytics:read
+  /analytics/questions:
+    get:
+      operationId: getQuestionAnalytics
+      summary: 주간·지역·주제별 문의 통계
+      tags:
+      - 통계
+      description: 기간 생략은 지난 완료 주. 최대 31일. 0분모 비율은 null. 진행 중인 주는 현재 시각까지만. 직전 동일 길이 기간 비교.
+      parameters:
+      - &id009
+        name: week_start
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+        description: KST 월요일. from/to와 동시 사용 불가
+      - &id010
+        name: from
+        in: query
+        required: false
+        schema: *id008
+        description: 포함 시작. to와 쌍으로 필수
+      - &id011
+        name: to
+        in: query
+        required: false
+        schema: *id008
+        description: 제외 끝. 미래 시각 금지; 이번 주는 week_start로 요청
+      - &id012
+        name: region_code
+        in: query
+        required: false
+        schema:
+          type: string
+        description: region_code
+      - &id013
+        name: store_id
+        in: query
+        required: false
+        schema: *id001
+        description: store_id
+      - &id014
+        name: category
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/Category'
+        description: category
+      - &id015
+        name: user_role
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - owner
+          - prospect
+          default: owner
+        description: user_role
+      - &id016
+        name: topic_id
+        in: query
+        required: false
+        schema: *id001
+        description: topic_id
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Analytics'
+                  request_id: *id001
+                required:
+                - data
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - hq
+      x-permissions:
+      - analytics:read
+  /analytics/question-events:
+    get:
+      operationId: listQuestionEvents
+      summary: 문의 원장·대표 질문 조회
+      tags:
+      - 통계
+      description: 마스킹된 질문만. 정렬 created_at DESC, question_id DESC. 원문 보존기간이 지난 질문은 식별 내용 대신 [보존기간 만료] 표시.
+      parameters:
+      - *id009
+      - *id010
+      - *id011
+      - *id012
+      - *id013
+      - *id014
+      - *id015
+      - *id016
+      - *id002
+      - *id003
+      - name: answer_status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/EventAnswerStatus'
+        description: answer_status
+      - name: resolution_status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ResolutionStatus'
+        description: resolution_status
+      - name: classification_status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ClassificationStatus'
+        description: classification_status
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QuestionEvent'
+                  meta:
+                    $ref: '#/components/schemas/PageMeta'
+                  request_id: *id001
+                required:
+                - data
+                - meta
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - hq
+      x-permissions:
+      - analytics:read
+  /analytics/question-events/{question_id}:
+    get:
+      operationId: getQuestionEvent
+      summary: 문의 한 건 상세
+      tags:
+      - 통계
+      description: 문의 한 건 상세
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/QuestionEvent'
+                  request_id: *id001
+                required:
+                - data
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - hq
+      x-permissions:
+      - analytics:read
+    patch:
+      operationId: patchQuestionEvent
+      summary: 문의 분류·업무 처리 상태 수정
+      tags:
+      - 통계
+      description: expected_revision으로 낙관적 잠금. topic_id는 category와 일치. answer_status·원래 질문·출처는 수정 불가. topic_id만
+        보낼 때 category는 기존 값으로 검사.
+      parameters:
+      - name: question_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/QuestionEvent'
+                  request_id: *id001
+                required:
+                - data
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+      x-phase: MVP
+      x-owner: backend
+      x-roles:
+      - hq
+      x-permissions:
+      - analytics:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionPatch'
+  /stt:
+    post:
+      operationId: transcribeAudio
+      summary: 음성 질문 텍스트 변환
+      tags:
+      - 선택 기능
+      description: 10 MiB·60초 이하 WebM/WAV. 자동 RAG 질의하지 않으며 STT 요청 자체는 질문 통계에 넣지 않음.
+      parameters: []
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SttResult'
+                  request_id: *id001
+                required:
+                - data
+                - request_id
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '413':
+          $ref: '#/components/responses/Error413'
+        '415':
+          $ref: '#/components/responses/Error415'
+        '422':
+          $ref: '#/components/responses/Error422'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '500':
+          $ref: '#/components/responses/Error500'
+        '503':
+          $ref: '#/components/responses/Error503'
+        '504':
+          $ref: '#/components/responses/Error504'
+      x-phase: OPTIONAL
+      x-owner: backend
+      x-roles:
+      - prospect
+      - owner
+      - hq
+      x-permissions:
+      - rag:ask
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                audio:
+                  type: string
+                  format: binary
+              required:
+              - audio
+            encoding:
+              audio:
+                contentType: audio/webm, audio/wav
+  /health:
+    get:
+      operationId: health
+      summary: 최소 준비 상태
+      tags:
+      - 상태
+      description: 최소 준비 상태
+      parameters: []
+      responses:
+        '200':
+          description: 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: ready
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+              description: 서버 추적 ID
+        '503':
+          description: 미준비
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: not_ready
+      x-phase: MVP
+      x-owner: backend
+      x-roles: []
+      x-permissions: []
+      security: []
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Id: &id018
+      type: string
+      description: 서버 발급 불투명 식별자
+      minLength: 1
+      maxLength: 100
+      pattern: ^[A-Za-z0-9][A-Za-z0-9._-]*$
+    Timestamp: &id020
+      type: string
+      description: 시간대 필수 RFC3339 시각
+      format: date-time
+    Role:
+      type: string
+      enum:
+      - prospect
+      - owner
+      - hq
+    Category:
+      type: string
+      enum:
+      - franchise
+      - recipe
+      - hygiene
+      - consumer
+      - other
+    AnswerStatus:
+      type: string
+      enum:
+      - answered
+      - needs_review
+      - handoff
+    EventAnswerStatus:
+      type: string
+      enum:
+      - processing
+      - answered
+      - needs_review
+      - handoff
+      - system_error
+    ResolutionStatus:
+      type: string
+      enum:
+      - unknown
+      - open
+      - in_progress
+      - closed
+    ClassificationStatus:
+      type: string
+      enum:
+      - pending
+      - classified
+      - failed
+      - corrected
+    MaterialType:
+      type: string
+      enum:
+      - official
+      - public_disclosure
+      - synthetic
+    Lifecycle:
+      type: string
+      enum:
+      - draft
+      - approved
+      - published
+    IndexStatus:
+      type: string
+      enum:
+      - not_started
+      - queued
+      - running
+      - ready
+      - failed
+    JobStatus:
+      type: string
+      enum:
+      - queued
+      - running
+      - succeeded
+      - failed
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        field:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+      required:
+      - field
+      - code
+      - message
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/ErrorDetail'
+            question_id:
+              anyOf:
+              - $ref: '#/components/schemas/Id'
+              - type: 'null'
+            retryable: &id019
+              type: boolean
+          required:
+          - code
+          - message
+          - details
+          - question_id
+          - retryable
+        request_id:
+          $ref: '#/components/schemas/Id'
+      required:
+      - error
+      - request_id
+    PageMeta:
+      type: object
+      additionalProperties: false
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total: &id017
+          type: integer
+          minimum: 0
+        total_pages: *id017
+      required:
+      - page
+      - page_size
+      - total
+      - total_pages
+    User:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id018
+        username:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        brand_id: *id018
+        store_id:
+          anyOf:
+          - *id018
+          - type: 'null'
+        region_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+        permissions:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+      required:
+      - id
+      - username
+      - role
+      - brand_id
+      - store_id
+      - region_code
+      - permissions
+    Region:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+      required:
+      - code
+      - name
+    Store:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id018
+        name:
+          type: string
+        region_code:
+          type: string
+        active: *id019
+      required:
+      - id
+      - name
+      - region_code
+      - active
+    Topic:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id018
+        label:
+          type: string
+        category:
+          $ref: '#/components/schemas/Category'
+        active: *id019
+      required:
+      - id
+      - label
+      - category
+      - active
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+          format: password
+      required:
+      - username
+      - password
+    LoginResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        accessToken:
+          type: string
+        token_type:
+          type: string
+          enum:
+          - Bearer
+        expires_in:
+          type: integer
+          minimum: 1
+        user:
+          $ref: '#/components/schemas/User'
+        request_id: *id018
+      required:
+      - accessToken
+      - token_type
+      - expires_in
+      - user
+      - request_id
+    AskRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        question:
+          type: string
+          description: trim 후 1~2000자. 범위·권한·source·top_k는 받지 않는다.
+          minLength: 1
+          maxLength: 2000
+          pattern: \S
+        conversation_id:
+          anyOf:
+          - *id018
+          - type: 'null'
+        as_of:
+          anyOf:
+          - *id020
+          - type: 'null'
+      required:
+      - question
+    Source:
+      type: object
+      additionalProperties: false
+      properties:
+        chunk_id: *id018
+        document_id: *id018
+        version_id: *id018
+        title:
+          type: string
+        version:
+          type: string
+        location:
+          type: string
+        page:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+        article:
+          anyOf:
+          - type: string
+          - type: 'null'
+        effective_from: *id020
+        effective_until:
+          anyOf:
+          - *id020
+          - type: 'null'
+        material_type:
+          $ref: '#/components/schemas/MaterialType'
+        is_demo: *id019
+        excerpt:
+          type: string
+          maxLength: 1500
+        detail_url:
+          type: string
+          format: uri-reference
+        file_url:
+          type: string
+          format: uri-reference
+      required:
+      - chunk_id
+      - document_id
+      - version_id
+      - title
+      - version
+      - location
+      - page
+      - article
+      - effective_from
+      - effective_until
+      - material_type
+      - is_demo
+      - excerpt
+      - detail_url
+      - file_url
+    RagAnswer:
+      type: object
+      additionalProperties: false
+      properties:
+        question_id: *id018
+        conversation_id: *id018
+        answer:
+          type: string
+          minLength: 1
+        steps:
+          type: array
+          items:
+            type: string
+        status:
+          $ref: '#/components/schemas/AnswerStatus'
+        needs_review: *id019
+        handoff: *id019
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/Source'
+        follow_up_questions:
+          type: array
+          items:
+            type: string
+        handoff_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+        category:
+          $ref: '#/components/schemas/Category'
+        topic_id:
+          anyOf:
+          - *id018
+          - type: 'null'
+        classification_status:
+          $ref: '#/components/schemas/ClassificationStatus'
+        as_of: *id020
+        basis:
+          type: string
+          enum:
+          - past
+          - current
+          - future
+        latency_ms: *id017
+      required:
+      - question_id
+      - conversation_id
+      - answer
+      - steps
+      - status
+      - needs_review
+      - handoff
+      - sources
+      - follow_up_questions
+      - handoff_reason
+      - category
+      - topic_id
+      - classification_status
+      - as_of
+      - basis
+      - latency_ms
+      allOf:
+      - if:
+          properties:
+            status:
+              const: answered
+          required:
+          - status
+        then:
+          properties:
+            needs_review:
+              const: false
+            handoff:
+              const: false
+            sources:
+              minItems: 1
+            handoff_reason:
+              type: 'null'
+      - if:
+          properties:
+            status:
+              const: needs_review
+          required:
+          - status
+        then:
+          properties:
+            needs_review:
+              const: true
+            handoff:
+              const: false
+          anyOf:
+          - properties:
+              follow_up_questions:
+                minItems: 1
+          - properties:
+              handoff_reason:
+                type: string
+                minLength: 1
+      - if:
+          properties:
+            status:
+              const: handoff
+          required:
+          - status
+        then:
+          properties:
+            needs_review:
+              const: true
+            handoff:
+              const: true
+            handoff_reason:
+              type: string
+              minLength: 1
+    Conversation:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id018
+        created_at: *id020
+        updated_at: *id020
+        messages:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              question_id: *id018
+              question_redacted:
+                type: string
+              created_at: *id020
+              answer_status:
+                $ref: '#/components/schemas/EventAnswerStatus'
+              result:
+                anyOf:
+                - $ref: '#/components/schemas/RagAnswer'
+                - type: 'null'
+              error_code:
+                anyOf:
+                - type: string
+                - type: 'null'
+            required:
+            - question_id
+            - question_redacted
+            - created_at
+            - answer_status
+            - result
+            - error_code
+      required:
+      - id
+      - created_at
+      - updated_at
+      - messages
+    OriginalSource:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        url:
+          anyOf:
+          - type: string
+            format: uri
+          - type: 'null'
+        edition:
+          type: string
+          minLength: 1
+          maxLength: 100
+        publisher:
+          type: string
+          minLength: 1
+          maxLength: 100
+        acquired_on:
+          type: string
+          format: date
+        note:
+          type: string
+          maxLength: 2000
+      required:
+      - title
+      - url
+      - edition
+      - publisher
+      - acquired_on
+      - note
+    IndexingPolicy:
+      type: object
+      additionalProperties: false
+      properties:
+        include_pages:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+          minItems: 1
+          uniqueItems: true
+        exclude_pages:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+          uniqueItems: true
+        legal_temporal_reviewed: *id019
+      required:
+      - exclude_pages
+      - legal_temporal_reviewed
+    DocumentVersion:
+      type: object
+      additionalProperties: false
+      properties:
+        document_id: *id018
+        version_id: *id018
+        brand_id: *id018
+        title:
+          type: string
+        version:
+          type: string
+        category:
+          $ref: '#/components/schemas/Category'
+        material_type:
+          $ref: '#/components/schemas/MaterialType'
+        is_demo: *id019
+        visibility:
+          $ref: '#/components/schemas/Role'
+        effective_from: *id020
+        lifecycle:
+          $ref: '#/components/schemas/Lifecycle'
+        index_status:
+          $ref: '#/components/schemas/IndexStatus'
+        created_at: *id020
+        approved_at:
+          anyOf:
+          - *id020
+          - type: 'null'
+        published_at:
+          anyOf:
+          - *id020
+          - type: 'null'
+        change_summary:
+          type: string
+        original_source:
+          $ref: '#/components/schemas/OriginalSource'
+        indexing_policy:
+          $ref: '#/components/schemas/IndexingPolicy'
+        file_name:
+          type: string
+        media_type:
+          type: string
+        file_size_bytes: *id017
+        sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        page_count:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+        file_url:
+          type: string
+          format: uri-reference
+        index_revision:
+          anyOf:
+          - *id018
+          - type: 'null'
+      required:
+      - document_id
+      - version_id
+      - brand_id
+      - title
+      - version
+      - category
+      - material_type
+      - is_demo
+      - visibility
+      - effective_from
+      - lifecycle
+      - index_status
+      - created_at
+      - approved_at
+      - published_at
+      - change_summary
+      - original_source
+      - indexing_policy
+      - file_name
+      - media_type
+      - file_size_bytes
+      - sha256
+      - page_count
+      - file_url
+      - index_revision
+    DocumentListItem:
+      type: object
+      additionalProperties: false
+      properties:
+        document_id: *id018
+        title:
+          type: string
+        category:
+          $ref: '#/components/schemas/Category'
+        material_type:
+          $ref: '#/components/schemas/MaterialType'
+        is_demo: *id019
+        visibility:
+          $ref: '#/components/schemas/Role'
+        selected_version_id:
+          anyOf:
+          - *id018
+          - type: 'null'
+        selected_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+        effective_from:
+          anyOf:
+          - *id020
+          - type: 'null'
+        lifecycle:
+          $ref: '#/components/schemas/Lifecycle'
+        index_status:
+          $ref: '#/components/schemas/IndexStatus'
+      required:
+      - document_id
+      - title
+      - category
+      - material_type
+      - is_demo
+      - visibility
+      - selected_version_id
+      - selected_version
+      - effective_from
+      - lifecycle
+      - index_status
+    Section:
+      type: object
+      additionalProperties: false
+      properties:
+        chunk_id: *id018
+        page:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+        article:
+          anyOf:
+          - type: string
+          - type: 'null'
+        heading:
+          type: string
+        text:
+          type: string
+        effective_from: *id020
+        effective_until:
+          anyOf:
+          - *id020
+          - type: 'null'
+      required:
+      - chunk_id
+      - page
+      - article
+      - heading
+      - text
+      - effective_from
+      - effective_until
+    DocumentDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        version:
+          $ref: '#/components/schemas/DocumentVersion'
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/Section'
+        sections_meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - version
+      - sections
+      - sections_meta
+    UploadMetadata:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        version:
+          type: string
+          minLength: 1
+          maxLength: 50
+        document_id: *id018
+        category:
+          $ref: '#/components/schemas/Category'
+        material_type:
+          $ref: '#/components/schemas/MaterialType'
+        is_demo: *id019
+        visibility:
+          $ref: '#/components/schemas/Role'
+        effective_from: *id020
+        original_source:
+          $ref: '#/components/schemas/OriginalSource'
+        change_summary:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        indexing_policy:
+          $ref: '#/components/schemas/IndexingPolicy'
+      required:
+      - title
+      - version
+      - category
+      - material_type
+      - is_demo
+      - visibility
+      - effective_from
+      - original_source
+      - change_summary
+      - indexing_policy
+    UploadRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        file:
+          type: string
+          description: PDF/TXT/MD; 10 MiB 이하. 실제 파일 바이트는 서버에서 검사한다.
+          format: binary
+        metadata:
+          type: string
+          description: UploadMetadata JSON 문자열. encoding의 contentType도 application/json으로 지정한다.
+      required:
+      - file
+      - metadata
+    ApprovalRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        review_note:
+          type: string
+          minLength: 1
+          maxLength: 2000
+      required:
+      - review_note
+    Approval:
+      type: object
+      additionalProperties: false
+      properties:
+        document_id: *id018
+        version_id: *id018
+        lifecycle:
+          type: string
+          enum:
+          - approved
+        index_status:
+          type: string
+          enum:
+          - queued
+          - running
+        job_id: *id018
+      required:
+      - document_id
+      - version_id
+      - lifecycle
+      - index_status
+      - job_id
+    IndexJob:
+      type: object
+      additionalProperties: false
+      properties:
+        job_id: *id018
+        document_id: *id018
+        version_id: *id018
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        chunk_count: *id017
+        index_revision:
+          anyOf:
+          - *id018
+          - type: 'null'
+        error_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+        error_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+        created_at: *id020
+        updated_at: *id020
+      required:
+      - job_id
+      - document_id
+      - version_id
+      - status
+      - chunk_count
+      - index_revision
+      - error_code
+      - error_message
+      - created_at
+      - updated_at
+    PublishRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        notice_title:
+          type: string
+          minLength: 1
+          maxLength: 200
+      required:
+      - notice_title
+    Publication:
+      type: object
+      additionalProperties: false
+      properties:
+        document_id: *id018
+        version_id: *id018
+        lifecycle:
+          type: string
+          enum:
+          - published
+        index_status:
+          type: string
+          enum:
+          - ready
+        effective_from: *id020
+        published_at: *id020
+        notice_id: *id018
+      required:
+      - document_id
+      - version_id
+      - lifecycle
+      - index_status
+      - effective_from
+      - published_at
+      - notice_id
+    Notice:
+      type: object
+      additionalProperties: false
+      properties:
+        notice_id: *id018
+        document_id: *id018
+        version_id: *id018
+        title:
+          type: string
+        change_summary:
+          type: string
+        effective_from: *id020
+        published_at: *id020
+        acknowledged_at:
+          anyOf:
+          - *id020
+          - type: 'null'
+        detail_url:
+          type: string
+          format: uri-reference
+      required:
+      - notice_id
+      - document_id
+      - version_id
+      - title
+      - change_summary
+      - effective_from
+      - published_at
+      - acknowledged_at
+      - detail_url
+    Acknowledgement:
+      type: object
+      additionalProperties: false
+      properties:
+        notice_id: *id018
+        store_id: *id018
+        acknowledged_by: *id018
+        acknowledged_at: *id020
+      required:
+      - notice_id
+      - store_id
+      - acknowledged_by
+      - acknowledged_at
+    NoticeTarget:
+      type: object
+      additionalProperties: false
+      properties:
+        store_id: *id018
+        store_name:
+          type: string
+        region_code:
+          type: string
+        acknowledged_at:
+          anyOf:
+          - *id020
+          - type: 'null'
+        acknowledged_by:
+          anyOf:
+          - *id018
+          - type: 'null'
+      required:
+      - store_id
+      - store_name
+      - region_code
+      - acknowledged_at
+      - acknowledged_by
+    NoticeTargetSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        notice_id: *id018
+        as_of: *id020
+        target_count: *id017
+        acknowledged_count: *id017
+        unacknowledged_count: *id017
+        acknowledgement_rate: &id021
+          anyOf:
+          - type: number
+            minimum: 0
+            maximum: 1
+          - type: 'null'
+      required:
+      - notice_id
+      - as_of
+      - target_count
+      - acknowledged_count
+      - unacknowledged_count
+      - acknowledgement_rate
+    FeedbackRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        helpful: *id019
+      required:
+      - helpful
+    Feedback:
+      type: object
+      additionalProperties: false
+      properties:
+        question_id: *id018
+        helpful: *id019
+        submitted_at: *id020
+      required:
+      - question_id
+      - helpful
+      - submitted_at
+    Period:
+      type: object
+      additionalProperties: false
+      properties:
+        start: *id020
+        end_exclusive: *id020
+        timezone:
+          type: string
+          enum:
+          - Asia/Seoul
+        is_partial: *id019
+        comparison_start: *id020
+        comparison_end_exclusive: *id020
+      required:
+      - start
+      - end_exclusive
+      - timezone
+      - is_partial
+      - comparison_start
+      - comparison_end_exclusive
+    MetricCounts:
+      type: object
+      additionalProperties: false
+      properties:
+        total: *id017
+        processing_count: *id017
+        answered_count: *id017
+        review_required_count: *id017
+        needs_review_count: *id017
+        handoff_count: *id017
+        system_error_count: *id017
+        completed_count: *id017
+        active_store_count: *id017
+        classification_pending_count: *id017
+        guidance_rate: *id021
+        review_required_rate: *id021
+        questions_per_active_store:
+          anyOf:
+          - type: number
+            minimum: 0
+          - type: 'null'
+      required:
+      - total
+      - processing_count
+      - answered_count
+      - review_required_count
+      - needs_review_count
+      - handoff_count
+      - system_error_count
+      - completed_count
+      - active_store_count
+      - classification_pending_count
+      - guidance_rate
+      - review_required_rate
+      - questions_per_active_store
+    AnalyticsFilters:
+      type: object
+      additionalProperties: false
+      properties:
+        region_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+        store_id:
+          anyOf:
+          - *id018
+          - type: 'null'
+        category:
+          anyOf:
+          - $ref: '#/components/schemas/Category'
+          - type: 'null'
+        user_role:
+          type: string
+          enum:
+          - owner
+          - prospect
+        topic_id:
+          anyOf:
+          - *id018
+          - type: 'null'
+      required:
+      - region_code
+      - store_id
+      - category
+      - user_role
+      - topic_id
+    TopicMetric:
+      type: object
+      additionalProperties: false
+      properties:
+        topic_id: *id018
+        label:
+          type: string
+        count: *id017
+        review_required_count: *id017
+      required:
+      - topic_id
+      - label
+      - count
+      - review_required_count
+    CategoryMetric:
+      type: object
+      additionalProperties: false
+      properties:
+        category:
+          $ref: '#/components/schemas/Category'
+        count: *id017
+      required:
+      - category
+      - count
+    RegionMetric:
+      type: object
+      additionalProperties: false
+      properties:
+        region_code:
+          type: string
+        region_name:
+          type: string
+        metrics:
+          $ref: '#/components/schemas/MetricCounts'
+        small_sample: *id019
+      required:
+      - region_code
+      - region_name
+      - metrics
+      - small_sample
+    Analytics:
+      type: object
+      additionalProperties: false
+      properties:
+        period:
+          $ref: '#/components/schemas/Period'
+        filters:
+          $ref: '#/components/schemas/AnalyticsFilters'
+        generated_at: *id020
+        metrics:
+          $ref: '#/components/schemas/MetricCounts'
+        previous_period:
+          $ref: '#/components/schemas/MetricCounts'
+        total_change:
+          type: integer
+        total_change_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+        change_kind:
+          type: string
+          enum:
+          - increase
+          - decrease
+          - unchanged
+          - new
+          - no_data
+        top_topics:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicMetric'
+        by_category:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryMetric'
+        by_region:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegionMetric'
+      required:
+      - period
+      - filters
+      - generated_at
+      - metrics
+      - previous_period
+      - total_change
+      - total_change_rate
+      - change_kind
+      - top_topics
+      - by_category
+      - by_region
+    QuestionEvent:
+      type: object
+      additionalProperties: false
+      properties:
+        question_id: *id018
+        conversation_id: *id018
+        store_id:
+          anyOf:
+          - *id018
+          - type: 'null'
+        store_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+        region_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+        region_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+        user_role:
+          $ref: '#/components/schemas/Role'
+        created_at: *id020
+        updated_at: *id020
+        question_redacted:
+          type: string
+        answer_status:
+          $ref: '#/components/schemas/EventAnswerStatus'
+        resolution_status:
+          $ref: '#/components/schemas/ResolutionStatus'
+        category:
+          $ref: '#/components/schemas/Category'
+        topic_id:
+          anyOf:
+          - *id018
+          - type: 'null'
+        classification_status:
+          $ref: '#/components/schemas/ClassificationStatus'
+        classification_version:
+          type: string
+        result:
+          anyOf:
+          - $ref: '#/components/schemas/RagAnswer'
+          - type: 'null'
+        error_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+        attempt_count:
+          type: integer
+          minimum: 1
+        revision:
+          type: integer
+          minimum: 1
+      required:
+      - question_id
+      - conversation_id
+      - store_id
+      - store_name
+      - region_code
+      - region_name
+      - user_role
+      - created_at
+      - updated_at
+      - question_redacted
+      - answer_status
+      - resolution_status
+      - category
+      - topic_id
+      - classification_status
+      - classification_version
+      - result
+      - error_code
+      - attempt_count
+      - revision
+    QuestionPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 1
+        category:
+          $ref: '#/components/schemas/Category'
+        topic_id:
+          anyOf:
+          - *id018
+          - type: 'null'
+        resolution_status:
+          $ref: '#/components/schemas/ResolutionStatus'
+        review_note:
+          type: string
+          maxLength: 2000
+      required:
+      - expected_revision
+      minProperties: 2
+    SttResult:
+      type: object
+      additionalProperties: false
+      properties:
+        text:
+          type: string
+        duration_ms:
+          type: integer
+          minimum: 0
+          maximum: 60000
+      required:
+      - text
+      - duration_ms
+    Health:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum:
+          - ready
+          - not_ready
+      required:
+      - status
+    EmptyRequest:
+      type: object
+      additionalProperties: false
+      properties: {}
+      required: []
+  responses:
+    Error400:
+      description: 잘못된 JSON·기간 필터 조합
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error401:
+      description: 로그인·토큰·내부 인증 실패
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+          description: Bearer (공개·사용자 토큰 경로)
+    Error403:
+      description: 역할·브랜드·점포·문서 권한 부족
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error404:
+      description: 허용 범위 안의 리소스 없음
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error409:
+      description: 상태·판본·동시 수정·중복 요청 충돌
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+          description: 재시도 가능 오류일 때만 초 단위
+    Error413:
+      description: 파일 10 MiB 초과
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error415:
+      description: 미지원 미디어 형식
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error422:
+      description: 스키마·날짜·의미 검증 실패
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error429:
+      description: 요청 제한
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+          description: 재시도 가능 오류일 때만 초 단위
+    Error500:
+      description: 내부 처리 오류
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error502:
+      description: 외부 응답 계약·업스트림 오류
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Error503:
+      description: 검색 미준비·서비스 일시 중단
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+          description: 재시도 가능 오류일 때만 초 단위
+    Error504:
+      description: 업스트림 시간 초과
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+tags:
+- name: 인증
+- name: 기준정보
+- name: 질문
+- name: 문서
+- name: 공지
+- name: 통계
+- name: 선택 기능
+- name: 상태
