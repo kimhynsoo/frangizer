@@ -63,14 +63,20 @@ class FaissRetriever:
             for rec in records:
                 meta = IndexedChunkMetadata.model_validate(rec["metadata"])
                 text = rec["text"]
+                review = rec.get("review", {})
+                flags = review.get("quality_flags", [])
+                if not isinstance(flags, list) or any(not isinstance(flag, str) for flag in flags):
+                    raise ValueError("artifact review flags")
                 if ((meta.document_id, meta.version_id, meta.index_revision) != key
                         or meta.embedding_model != self.embedder.model
                         or not isinstance(text, str) or not 0 < len(text) <= 12000
                         or hashlib.sha256(text.encode()).hexdigest() != meta.content_sha256):
                     raise ValueError("artifact metadata or content")
                 items.append(Evidence(text, meta, legal_temporal_unreviewed=(
-                    meta.material_type == "official" and quality.get("legal_temporal_reviewed") is not True
-                )))
+                    meta.material_type == "official" and review.get(
+                        "legal_temporal_reviewed", quality.get("legal_temporal_reviewed"),
+                    ) is not True
+                ), quality_flags=tuple(flags)))
             ids = [e.metadata.chunk_id for e in items]
             if ids != build["chunk_ids"] or len(ids) != len(set(ids)):
                 raise ValueError("artifact mapping")

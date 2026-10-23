@@ -19,6 +19,14 @@ def assemble_answer(
             raise upstream_error()
         selected.append(item)
 
+    if draft.status == "answered" and any(
+        {"table_needs_review", "table_pairing_mismatch"}.intersection(e.quality_flags) for e in selected
+    ):
+        draft = draft.model_copy(update={
+            "status": "needs_review", "answer": "인용된 표의 행·열과 수치 검수가 필요합니다. 출처 원문을 확인해 주세요.",
+            "steps": [], "follow_up_questions": [], "handoff_reason": "표 추출 품질 검수 필요",
+        })
+
     if draft.status == "answered" and (not selected or any(e.truncated for e in selected)):
         raise upstream_error()
     if draft.status == "needs_review" and not (draft.follow_up_questions or draft.handoff_reason):

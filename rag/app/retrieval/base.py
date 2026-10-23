@@ -12,6 +12,7 @@ class Evidence:
     metadata: IndexedChunkMetadata
     truncated: bool = False
     legal_temporal_unreviewed: bool = False
+    quality_flags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

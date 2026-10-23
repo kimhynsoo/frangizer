@@ -131,6 +131,7 @@ class CounselAgent:
                     "version": item.metadata.version, "material_type": item.metadata.material_type,
                     "is_demo": item.metadata.is_demo,
                     "legal_temporal_unreviewed": item.legal_temporal_unreviewed,
+                    "quality_flags": list(item.quality_flags),
                     "effective_from": item.metadata.effective_from.isoformat(),
                     "effective_until": item.metadata.effective_until.isoformat() if item.metadata.effective_until else None,
                 })

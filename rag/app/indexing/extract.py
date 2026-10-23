@@ -58,6 +58,62 @@ def _strip_repeated_edges(pages):
         p.lines = keep
 
 
+DISPUTE_HEADERS = ("분쟁유형", "해결기준", "비고")
+PAIR_MARK = "⇒ "
+NOTE_MARK = "[비고]"
+
+
+def _layout_lines(pg):
+    out = []
+    for b in pg.get_text("dict")["blocks"]:
+        for l in b.get("lines", []):
+            t = "".join(s["text"] for s in l["spans"]).replace("\xa0", " ").strip()
+            if t:
+                out.append((l["bbox"][0], l["bbox"][1], t, l["bbox"][2]))
+    return out
+
+
+def pair_dispute_rows(pg):
+    """소비자분쟁해결기준 별표의 `분쟁유형 | 해결기준 | 비고` 표를 행 단위로 다시 쓴다.
+
+    일반 텍스트 추출은 칸 단위(분쟁유형 전부 → 해결기준 전부)로 나와 '어떤 유형에 어떤 기준'인지가 순서로만 남는다.
+    같은 높이(또는 바로 위)의 분쟁유형 줄 밑에 해결기준 줄을 `⇒`로 붙이고, 비고는 [비고] 아래에 모은다.
+    원문 줄은 그대로 두고 표시만 더한다. 머리글이 없으면 None.
+    """
+    lines = _layout_lines(pg)
+    heads = {re.sub(r"\s+", "", t): ((x + x1) / 2, y) for x, y, t, x1 in lines if re.sub(r"\s+", "", t) in DISPUTE_HEADERS}
+    if len(heads) != 3:
+        return None
+    head_y = max(y for _, y in heads.values())
+    # 머리글은 칸 가운데 정렬이라 머리글 중심점 사이의 중간을 칸 경계로 쓴다
+    c0, c1, c2 = (heads[h][0] for h in DISPUTE_HEADERS)
+    b1, b2 = (c0 + c1) / 2, (c1 + c2) / 2
+    lines = [(x, y, t) for x, y, t, _ in lines]
+    above = [t for x, y, t in sorted(lines, key=lambda r: (r[1], r[0])) if y < head_y - 2]
+    body = [(x, y, t) for x, y, t in lines if y >= head_y - 2 and re.sub(r"\s+", "", t) not in DISPUTE_HEADERS]
+    col0 = sorted([(y, t) for x, y, t in body if x < b1])
+    col1 = sorted([(y, t) for x, y, t in body if b1 <= x < b2])
+    col2 = sorted([(y, t) for x, y, t in body if x >= b2])
+    attached = {i: [] for i in range(len(col0))}
+    lead = []  # 첫 분쟁유형보다 위에 있는 해결기준 줄
+    for y, t in col1:
+        anchors = [i for i, (y0, _) in enumerate(col0) if y0 <= y + 2]
+        (attached[anchors[-1]] if anchors else lead).append(t)
+    out = above + list(DISPUTE_HEADERS) + [PAIR_MARK + t for t in lead]  # 머리글은 공백만 정리해 남긴다
+    for i, (_, t) in enumerate(col0):
+        out.append(t)
+        out.extend(PAIR_MARK + a for a in attached[i])
+    if col2:
+        out.append(NOTE_MARK)
+        out.extend(t for _, t in col2)
+    return out
+
+
+def _same_chars(a, b):
+    strip = lambda s: Counter(re.sub(r"\s+", "", s))
+    return strip(a) == strip(b)
+
+
 def extract_pdf(path, pages=None):
     """pages: 처리할 PDF 쪽 번호 집합(1부터). None이면 전체."""
     try:
@@ -72,6 +128,14 @@ def extract_pdf(path, pages=None):
         raw = pg.get_text()
         lines = [l.replace("\xa0", " ").strip() for l in raw.splitlines()]
         lines = [l for l in lines if l]
+        paired = pair_dispute_rows(pg)
+        mismatch = False
+        if paired is not None:
+            restored = "\n".join(l for l in paired if l != NOTE_MARK).replace(PAIR_MARK, "")
+            if _same_chars(restored, raw):  # 글자 하나라도 빠지거나 늘면 원래 추출을 쓴다
+                lines = paired
+            else:
+                paired, mismatch = None, True
         p = PageText(page=no, lines=lines)
         if len("".join(lines)) < SCAN_MIN_CHARS:
             p.flags.append("low_text_possible_scan")
@@ -79,8 +143,12 @@ def extract_pdf(path, pages=None):
             p.table_count = len(pg.find_tables().tables)
         except Exception:
             p.flags.append("table_detection_failed")
-        if p.table_count:
+        if paired is not None:
+            p.flags.append("table_rows_paired")
+        elif p.table_count:
             p.flags.append("table_needs_review")
+        if mismatch:
+            p.flags.append("table_pairing_mismatch")
         out.append(p)
     _strip_repeated_edges(out)
     return out, doc.page_count

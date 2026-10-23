@@ -1,0 +1,32 @@
+{
+  "index_revision": "idx-517655b16ec6754a0a1f",
+  "document_id": "consumer-dispute-standard-annex",
+  "version_id": "consumer-dispute-standard-annex-2025-12-18",
+  "source_sha256": "4e8b5c60df41deeac2c1bb2c39ac1408c985f99d82326664e27c2f34d2ae8370",
+  "indexing_policy": {
+    "include_pages": [
+      122
+    ],
+    "exclude_pages": [],
+    "legal_temporal_reviewed": false
+  },
+  "chunker_version": "chunker-v2",
+  "embedding_model": "test-fake-embedding",
+  "dimension": 8,
+  "metric": "inner_product_on_l2_normalized",
+  "normalization": "L2 (질문 벡터도 L2 정규화 후 내적 = 코사인)",
+  "embedding_input": "chunks.jsonl의 text 그대로",
+  "content_sha256": "sha256(text, UTF-8)",
+  "record_format": {
+    "metadata": "IndexedChunkMetadata (계약, 추가 필드 없음)",
+    "heading": "섹션 제목(조 제목·쪽 첫 줄). 나눈 조각은 본문 첫 줄에도 '(이어서)'로 반복",
+    "text": "임베딩 입력 = 이 값 그대로. content_sha256 = sha256(text, UTF-8)",
+    "section": "parent_section_key·part·parts·pages — 같은 parent의 part 1..parts를 이어 붙이면 원문 섹션",
+    "review": "legal_temporal_reviewed(문서 단위), period_source(document|future_trailer), temporal_note, quality_flags(조각이 걸친 쪽의 추출 경고: table_needs_review 등)"
+  },
+  "chunk_count": 1,
+  "chunk_ids": [
+    "chk-517655b16ec6-p122"
+  ],
+  "created_at": "2026-10-23T14:03:21.106651+09:00"
+}

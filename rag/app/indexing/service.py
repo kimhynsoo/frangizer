@@ -5,7 +5,7 @@ from pathlib import Path
 
 from ..errors import ServiceError
 from .job import JobConflict, JobStore, request_hash, run_index_job
-from .models import IndexJob, IndexJobRequest
+from .models import IndexJobRequest
 
 
 class IndexService:
@@ -29,31 +29,29 @@ class IndexService:
                 return existing["job"]
             if len(self.tasks) >= self.max_pending:
                 raise ServiceError(503, "SERVICE_UNAVAILABLE", "색인 대기 작업이 많습니다.", retryable=True)
-            now = datetime.now(timezone.utc)
-            job = IndexJob(job_id=req.job_id, document_id=req.document_id, version_id=req.version_id,
-                           status="queued", chunk_count=0, index_revision=None, error_code=None,
-                           error_message=None, created_at=now, updated_at=now).model_dump(mode="json")
-            self.store.put(req.job_id, {"request_hash": rhash, "job": job})
-            task = asyncio.create_task(self._run(req))
-            self.tasks.add(task)
-            task.add_done_callback(self.tasks.discard)
-            return job
+            return run_index_job(
+                req.model_dump(mode="json", exclude_unset=True),
+                document_root=self.document_root, index_root=self.index_root,
+                embedder=self.embedder, background=self._enqueue,
+            )
 
-    async def _run(self, req):
+    def _enqueue(self, function, *args):
+        task = asyncio.create_task(self._run(function, args))
+        self.tasks.add(task)
+        task.add_done_callback(self.tasks.discard)
+
+    async def _run(self, function, args):
+        job_id = args[0].job_id
         async with self.worker:
             try:
-                await asyncio.to_thread(
-                    run_index_job, req.model_dump(mode="json", exclude_unset=True),
-                    document_root=self.document_root, index_root=self.index_root,
-                    embedder=self.embedder, _reserved=True,
-                )
+                await asyncio.to_thread(function, *args)
             except Exception:
                 # Do not persist exception text, paths, provider bodies or credentials.
-                record = self.store.get(req.job_id)
+                record = self.store.get(job_id)
                 record["job"].update(status="failed", error_code="INDEXING_FAILED",
                                      error_message="색인 작업을 처리하지 못했습니다",
                                      updated_at=datetime.now(timezone.utc).isoformat())
-                self.store.put(req.job_id, record)
+                self.store.put(job_id, record)
 
     def get(self, job_id):
         record = self.store.get(job_id)

@@ -106,6 +106,7 @@ def revision_id(req: IndexJobRequest, embedding_model, dimension):
         "chunker": CHUNKER_VERSION, "embedding_model": embedding_model,
         "dimension": dimension, "document_id": req.document_id, "category": req.category,
         "original_source": req.original_source.model_dump(mode="json"),
+        "record_format": RECORD_FORMAT,
         "effective_from": req.effective_from.isoformat(),
         "metadata": [req.title, req.version, req.visibility, req.material_type, req.is_demo, req.brand_id],
     })
@@ -130,6 +131,12 @@ def build_chunks(req: IndexJobRequest, path: Path):
     except ExtractionError as e:
         raise IndexJobFailed("EXTRACTION_FAILED", str(e)) from e
 
+    if req.category == "recipe":
+        # 레시피 재료표는 재료→계량→단위 순서로 바르게 추출되고, 값은 구조화 자료에서 원문 대조를 마쳤다.
+        # B는 계량·단계를 data/structured/demo_cafe_recipes.json에서 가져온다(B 정리 2026-10-23).
+        for p in pages:
+            if "table_needs_review" in p.flags:
+                p.flags[p.flags.index("table_needs_review")] = "table_values_in_structured_recipe"
     report["page_count"] = page_count
     report["processed_pages"] = [p.page for p in pages]
     for p in pages:
@@ -138,10 +145,19 @@ def build_chunks(req: IndexJobRequest, path: Path):
     scans = [p.page for p in pages if "low_text_possible_scan" in p.flags]
     if scans:
         report["warnings"].append({"code": "POSSIBLE_SCAN", "pages": scans, "message": "글자가 거의 없음. OCR 필요 여부 검토"})
-    tables = [p.page for p in pages if p.table_count]
+    paired = [p.page for p in pages if "table_rows_paired" in p.flags]
+    if paired:
+        report["warnings"].append({"code": "TABLE_ROWS_PAIRED", "pages": paired,
+                                   "message": "분쟁유형·해결기준 표를 같은 높이 행끼리 ⇒로 짝지음(글자 대조 통과). 비고는 [비고] 아래"})
+    tables = [p.page for p in pages if "table_needs_review" in p.flags]
     if tables:
         report["warnings"].append({"code": "TABLE_NEEDS_REVIEW", "pages": tables,
-                                   "message": "표가 있는 쪽. 본문은 줄 단위 텍스트로만 넣었고 표 구조·셀 값은 원문 대조 필요"})
+                                   "message": "표가 있는 쪽. 본문은 줄 단위 텍스트로만 넣었고 표 구조·셀 값은 원문 대조 필요. "
+                                              "해당 조각(review.quality_flags)의 수치는 원문 확인 없이 답변에 쓰지 않는다"})
+    mismatch = [p.page for p in pages if "table_pairing_mismatch" in p.flags]
+    if mismatch:
+        report["warnings"].append({"code": "TABLE_PAIRING_MISMATCH", "pages": mismatch,
+                                   "message": "표 행 짝짓기 결과가 원문 글자와 달라 원래 추출을 씀"})
     if len(scans) == len(pages):
         raise IndexJobFailed("EXTRACTION_FAILED", "모든 쪽에서 본문을 추출하지 못했다(스캔본 가능성)")
 
@@ -181,7 +197,18 @@ def chunk_id(rev, section_key):
     return cid
 
 
-def _chunk_records(req, chunks, rev, embedding_model):
+# chunks.jsonl 한 줄 형식(A·B 합의용). metadata는 계약 그대로, 나머지는 B가 복원·표시에 쓰는 정보.
+RECORD_FORMAT = {
+    "metadata": "IndexedChunkMetadata (계약, 추가 필드 없음)",
+    "heading": "섹션 제목(조 제목·쪽 첫 줄). 나눈 조각은 본문 첫 줄에도 '(이어서)'로 반복",
+    "text": "임베딩 입력 = 이 값 그대로. content_sha256 = sha256(text, UTF-8)",
+    "section": "parent_section_key·part·parts·pages — 같은 parent의 part 1..parts를 이어 붙이면 원문 섹션",
+    "review": "legal_temporal_reviewed(문서 단위), period_source(document|future_trailer), temporal_note, "
+              "quality_flags(조각이 걸친 쪽의 추출 경고: table_needs_review 등)",
+}
+
+
+def _chunk_records(req, chunks, rev, embedding_model, page_flags=None):
     records = []
     for c in chunks:
         text = c.text
@@ -196,7 +223,15 @@ def _chunk_records(req, chunks, rev, embedding_model):
             original_source=req.original_source, embedding_model=embedding_model,
             content_sha256=hashlib.sha256(text.encode()).hexdigest(),
         )
-        records.append({"metadata": meta.model_dump(mode="json"), "heading": c.heading, "text": text})
+        flags = sorted({f for pg in (c.pages or (c.page,)) for f in (page_flags or {}).get(pg, [])})
+        records.append({
+            "metadata": meta.model_dump(mode="json"), "heading": c.heading, "text": text,
+            "section": {"parent_section_key": c.parent_section_key or c.section_key, "part": c.part,
+                        "parts": c.parts, "pages": list(c.pages or ([c.page] if c.page else []))},
+            "review": {"legal_temporal_reviewed": req.indexing_policy.legal_temporal_reviewed,
+                       "period_source": "future_trailer" if (c.effective_from or c.effective_until) else "document",
+                       "temporal_note": c.temporal_note, "quality_flags": flags},
+        })
     return records
 
 
@@ -242,7 +277,8 @@ def write_revision(index_root: Path, req, chunks, report, embedder, rev):
     tmp = revisions / f".tmp-{rev}-{uuid.uuid4().hex[:8]}"
     tmp.mkdir()
     try:
-        records = _chunk_records(req, chunks, rev, embedder.model)
+        page_flags = {p["page"]: p["flags"] for p in report["pages"]}
+        records = _chunk_records(req, chunks, rev, embedder.model, page_flags)
         try:
             vectors = np.asarray(embedder.embed([r["text"] for r in records]), dtype="float32")
         except EmbeddingError:
@@ -264,7 +300,9 @@ def write_revision(index_root: Path, req, chunks, report, embedder, rev):
             "index_revision": rev, "document_id": req.document_id, "version_id": req.version_id,
             "source_sha256": req.source.sha256, "indexing_policy": req.indexing_policy.model_dump(mode="json", exclude_unset=True),
             "chunker_version": CHUNKER_VERSION, "embedding_model": embedder.model, "dimension": embedder.dim,
-            "metric": "inner_product_on_l2_normalized", "chunk_count": len(records),
+            "metric": "inner_product_on_l2_normalized", "normalization": "L2 (질문 벡터도 L2 정규화 후 내적 = 코사인)",
+            "embedding_input": "chunks.jsonl의 text 그대로", "content_sha256": "sha256(text, UTF-8)",
+            "record_format": RECORD_FORMAT, "chunk_count": len(records),
             "chunk_ids": [r["metadata"]["chunk_id"] for r in records], "created_at": _now().isoformat(),
         }
         (tmp / "build-manifest.json").write_text(json.dumps(build, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -324,9 +362,13 @@ class JobStore:
 
 
 def run_index_job(payload: dict, *, document_root: Path | None = None, index_root: Path | None = None,
-                  embedder=None, _reserved=False) -> dict:
+                  embedder=None, background=None) -> dict:
     """IndexJob(dict, 계약 형식)을 돌려준다. 입력 스키마 오류는 ValidationError(→ 422),
-    같은 job_id·다른 내용은 JobConflict(→ 409). 그 밖의 실패는 status=failed로 기록한다."""
+    같은 job_id·다른 내용은 JobConflict(→ 409). 그 밖의 실패는 status=failed로 기록한다.
+
+    background: 실행을 미룰 함수(예: FastAPI BackgroundTasks.add_task). 주면 작업을 queued로 기록하고 바로
+    돌려준다. 백엔드는 같은 job_id로 다시 보내 현재 상태를 받는다(C 구현, 읽기 제한 25초).
+    """
     req = IndexJobRequest.model_validate(payload)
     if document_root is None or index_root is None:
         env_doc, env_idx = default_roots()
@@ -337,14 +379,24 @@ def run_index_job(payload: dict, *, document_root: Path | None = None, index_roo
     if existing:
         if existing["request_hash"] != rhash:
             raise JobConflict(f"job_id {req.job_id}에 다른 내용의 작업이 이미 있다")
-        if not (_reserved and existing["job"]["status"] == "queued"):
-            return existing["job"]
+        return existing["job"]
 
-    created = datetime.fromisoformat(existing["job"]["created_at"]) if existing else _now()
-    job = IndexJob(job_id=req.job_id, document_id=req.document_id, version_id=req.version_id, status="running",
-                   chunk_count=0, index_revision=None, error_code=None, error_message=None,
-                   created_at=created, updated_at=_now())
+    created = _now()
+    job = IndexJob(job_id=req.job_id, document_id=req.document_id, version_id=req.version_id,
+                   status="queued" if background else "running", chunk_count=0, index_revision=None,
+                   error_code=None, error_message=None, created_at=created, updated_at=created)
     store.put(req.job_id, {"request_hash": rhash, "job": job.model_dump(mode="json")})
+    if background:
+        background(_execute, req, rhash, job, document_root, index_root, embedder)
+        return job.model_dump(mode="json")
+    return _execute(req, rhash, job, document_root, index_root, embedder)
+
+
+def _execute(req, rhash, job, document_root, index_root, embedder):
+    store = JobStore(index_root)
+    if job.status == "queued":
+        job = job.model_copy(update={"status": "running", "updated_at": _now()})
+        store.put(req.job_id, {"request_hash": rhash, "job": job.model_dump(mode="json")})
     try:
         path = resolve_storage_key(document_root, req.source.storage_key)
         if _sha256_file(path) != req.source.sha256:
