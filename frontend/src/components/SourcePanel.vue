@@ -132,6 +132,11 @@ watch(
       </p>
       <ErrorNotice :error="error" @retry="load(page)" />
       <p v-if="busy" role="status">문서를 불러오는 중입니다…</p>
+      <div v-if="source.excerpt" class="selected-source-excerpt">
+        <h3>답변에 사용된 근거</h3>
+        <p v-if="source.location" class="muted">{{ source.location }}</p>
+        <p>{{ source.excerpt }}</p>
+      </div>
       <template v-if="data"
         ><div class="source-meta">
           <span class="badge">v{{ data.version.version }}</span

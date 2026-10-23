@@ -75,41 +75,52 @@ watch(
         <BookOpen :size="16" />답변의 근거
         <span>{{ result.sources.length }}</span>
       </div>
-      <button
+      <div
         v-for="item in result.sources"
         :key="item.chunk_id"
         class="source-card"
-        @click="$emit('source', item)"
       >
-        <div>
-          <span
-            class="badge"
-            :class="
-              item.is_demo || item.material_type === 'synthetic'
-                ? 'synthetic'
-                : ''
-            "
-            >{{
-              item.is_demo || item.material_type === "synthetic"
-                ? "합성·시연 자료"
-                : item.material_type === "official"
-                  ? "법령·고시"
-                  : "정보공개서 원본(수집본)"
-            }}</span
-          ><span class="muted">v{{ item.version }}</span>
+        <div class="source-card-summary">
+          <div class="source-card-meta">
+            <span
+              class="badge"
+              :class="
+                item.is_demo || item.material_type === 'synthetic'
+                  ? 'synthetic'
+                  : ''
+              "
+              >{{
+                item.is_demo || item.material_type === "synthetic"
+                  ? "합성·시연 자료"
+                  : item.material_type === "official"
+                    ? "법령·고시"
+                    : "정보공개서 원본(수집본)"
+              }}</span
+            >
+            <span v-if="item.version" class="muted">v{{ item.version }}</span>
+          </div>
+          <strong>{{ item.title }}</strong>
+          <small
+            v-if="item.location || item.page || item.article"
+            class="muted"
+          >
+            {{
+              item.location ||
+              [item.page ? `PDF ${item.page}쪽` : "", item.article]
+                .filter(Boolean)
+                .join(" / ")
+            }}</small
+          >
         </div>
-        <strong>{{ item.title }}<ArrowUpRight :size="16" /></strong
-        ><small>{{ item.location }}</small>
-        <p>{{ item.excerpt }}</p>
-        <small
-          >적용 시작
-          {{
-            new Date(item.effective_from).toLocaleDateString("ko-KR", {
-              timeZone: "Asia/Seoul",
-            })
-          }}</small
+        <button
+          type="button"
+          class="button secondary small"
+          :aria-label="`${item.title} 근거 열기`"
+          @click="$emit('source', item)"
         >
-      </button>
+          열기<ArrowUpRight :size="16" />
+        </button>
+      </div>
     </div>
     <p v-if="notice" class="muted" role="status">{{ notice }}</p>
   </div>

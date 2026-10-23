@@ -964,7 +964,10 @@ td small {
   margin-top: 24px;
 }
 .source-card {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   width: 100%;
   text-align: left;
   border: 1px solid #000;
@@ -973,32 +976,38 @@ td small {
   padding: 15px;
   margin: 8px 0;
 }
-.source-card:hover {
-  border-color: #000;
-}
-.source-card > div {
+.source-card-summary {
+  min-width: 0;
   display: flex;
-  gap: 8px;
-  align-items: center;
-  font-size: 10px;
+  flex-direction: column;
+  gap: 6px;
+  overflow-wrap: anywhere;
 }
-.source-card > strong {
+.source-card-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
   font-size: 12px;
+}
+.source-card-summary > small {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.source-card-summary > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
   font-weight: 550;
-  margin: 10px 0 2px;
 }
-.source-card > small {
-  font-size: 10px;
-  color: #666;
+.source-card > button {
+  flex-shrink: 0;
 }
-.source-card > p {
-  font-size: 11px;
+.selected-source-excerpt > p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   line-height: 1.8;
-  color: #666;
-  margin: 10px 0;
 }
 .follow-up,
 .handoff-box {
@@ -2575,4 +2584,73 @@ button:disabled {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 12px;
+}
+
+.ask-tabs-page {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  min-width: 0;
+}
+.chat-tabs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 24px;
+  min-width: 0;
+}
+.chat-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.chat-tab {
+  display: flex;
+  align-items: center;
+  border: 1px solid #000;
+  background: #fff;
+  color: #000;
+  border-radius: 8px;
+  max-width: 100%;
+  min-width: 0;
+}
+.chat-tab.selected {
+  background: #000;
+  color: #fff;
+}
+.chat-tab button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 9px 12px;
+  border-radius: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+  cursor: pointer;
+}
+.chat-tab .chat-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: stretch;
+  padding: 9px;
+}
+.chat-tab-close:hover {
+  opacity: 0.65;
+}
+
+.chat-examples .suggestion-grid {
+  margin: 12px 0 24px;
+}
+.chat-examples .suggestion-card {
+  min-height: 100px;
+  justify-content: center;
+}
+.chat-examples .suggestion-card strong {
+  max-width: none;
 }
