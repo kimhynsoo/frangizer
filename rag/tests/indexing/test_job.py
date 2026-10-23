@@ -183,3 +183,29 @@ def test_chunk_id_never_exceeds_contract_limit():
     a, b = chunk_id(rev, long_a), chunk_id(rev, long_b)
     assert len(a) <= 100 and len(b) <= 100 and a != b
     assert chunk_id(rev, "art-17") == "chk-aaaaaaaaaaaa-art-17"
+
+
+def test_background_returns_queued_then_resubmit_reports_progress(make_request, roots, embedder, contract):
+    """백엔드(C)는 같은 job_id로 다시 보내 상태를 받는다. 첫 응답은 바로 queued."""
+    pending = []
+    req = make_request()
+    first = run_index_job(req, document_root=roots[0], index_root=roots[1], embedder=embedder,
+                          background=lambda fn, *a: pending.append((fn, a)))
+    contract("IndexJob", first)
+    assert first["status"] == "queued" and revisions(roots) == []
+    assert run(req, roots, embedder)["status"] == "queued"  # 재제출: 같은 내용 → 현재 상태
+    fn, args = pending.pop()
+    fn(*args)  # 백그라운드 실행
+    done = run(req, roots, embedder)
+    assert done["status"] == "succeeded" and done["created_at"] == first["created_at"]
+    assert revisions(roots) == [done["index_revision"]]
+
+
+def test_backend_style_request_is_accepted(make_request, roots, embedder, contract):
+    """C 백엔드 syncJob이 보내는 형태: include_pages 생략, url null, effective_from +09:00."""
+    req = make_request()
+    req["brand_id"] = "brand-demo-a"
+    req["original_source"]["url"] = None
+    assert "include_pages" not in req["indexing_policy"]
+    contract("IndexJobRequest", req)
+    assert run(req, roots, embedder)["status"] == "succeeded"

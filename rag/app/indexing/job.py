@@ -357,9 +357,13 @@ class JobStore:
 
 
 def run_index_job(payload: dict, *, document_root: Path | None = None, index_root: Path | None = None,
-                  embedder=None) -> dict:
+                  embedder=None, background=None) -> dict:
     """IndexJob(dict, 계약 형식)을 돌려준다. 입력 스키마 오류는 ValidationError(→ 422),
-    같은 job_id·다른 내용은 JobConflict(→ 409). 그 밖의 실패는 status=failed로 기록한다."""
+    같은 job_id·다른 내용은 JobConflict(→ 409). 그 밖의 실패는 status=failed로 기록한다.
+
+    background: 실행을 미룰 함수(예: FastAPI BackgroundTasks.add_task). 주면 작업을 queued로 기록하고 바로
+    돌려준다. 백엔드는 같은 job_id로 다시 보내 현재 상태를 받는다(C 구현, 읽기 제한 25초).
+    """
     req = IndexJobRequest.model_validate(payload)
     if document_root is None or index_root is None:
         env_doc, env_idx = default_roots()
@@ -373,10 +377,21 @@ def run_index_job(payload: dict, *, document_root: Path | None = None, index_roo
         return existing["job"]
 
     created = _now()
-    job = IndexJob(job_id=req.job_id, document_id=req.document_id, version_id=req.version_id, status="running",
-                   chunk_count=0, index_revision=None, error_code=None, error_message=None,
-                   created_at=created, updated_at=created)
+    job = IndexJob(job_id=req.job_id, document_id=req.document_id, version_id=req.version_id,
+                   status="queued" if background else "running", chunk_count=0, index_revision=None,
+                   error_code=None, error_message=None, created_at=created, updated_at=created)
     store.put(req.job_id, {"request_hash": rhash, "job": job.model_dump(mode="json")})
+    if background:
+        background(_execute, req, rhash, job, document_root, index_root, embedder)
+        return job.model_dump(mode="json")
+    return _execute(req, rhash, job, document_root, index_root, embedder)
+
+
+def _execute(req, rhash, job, document_root, index_root, embedder):
+    store = JobStore(index_root)
+    if job.status == "queued":
+        job = job.model_copy(update={"status": "running", "updated_at": _now()})
+        store.put(req.job_id, {"request_hash": rhash, "job": job.model_dump(mode="json")})
     try:
         path = resolve_storage_key(document_root, req.source.storage_key)
         if _sha256_file(path) != req.source.sha256:
