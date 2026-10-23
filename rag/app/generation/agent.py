@@ -13,6 +13,7 @@ from ..privacy import redact
 from ..retrieval.base import Evidence, Retriever, validate_batch
 from ..schemas import InternalAnswer, InternalQuery, Usage
 from .answer import assemble_answer
+from .evidence_policy import table_blocked
 from .model import Draft, ModelDriver
 
 PROMPT = Path(__file__).resolve().parents[2] / "prompts" / "counsel.md"
@@ -125,7 +126,10 @@ class CounselAgent:
                     raise upstream_error()
                 evidence[chunk_id] = item
                 returned.append({
-                    "chunk_id": chunk_id, "text": redact(item.text), "truncated": item.truncated,
+                    "chunk_id": chunk_id,
+                    "text": ('[미검수 표: 본문은 답변 근거로 제공하지 않습니다. 원문 확인 안내만 가능합니다.]'
+                             if table_blocked(item) else redact(item.text)),
+                    "usable_as_evidence": not table_blocked(item), "truncated": item.truncated,
                     "title": item.metadata.title, "page": item.metadata.page,
                     "article": item.metadata.article, "section_key": item.metadata.section_key,
                     "version": item.metadata.version, "material_type": item.metadata.material_type,

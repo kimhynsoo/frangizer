@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from .extract import PAIR_MARK
 
-CHUNKER_VERSION = "chunker-v2"  # v2: 분쟁표 행 짝, 분할 순서·쪽 정보
+CHUNKER_VERSION = "chunker-v4"  # v4: 로컬 표 셀 추출·본문 분리·원문에 묶인 검수 표시
 MAX_CHARS = 1500
 
 ARTICLE_RE = re.compile(r"^제(\d+)조(?:의(\d+))?(?:\s?\(([^)]*)\)|\s+삭제)")
@@ -40,6 +40,8 @@ class Chunk:
     parts: int = 1                      # 같은 섹션을 나눈 조각 수 (part는 1부터)
     parent_section_key: str = ""        # 나누기 전 섹션 키. 나머지 조각을 모아 원문 섹션을 복원할 때 쓴다
     pages: tuple = ()                   # 섹션이 걸친 PDF 쪽(시작 쪽 포함)
+    quality_flags: tuple[str, ...] | None = None  # None은 기존 쪽 단위 표시 상속
+    table: dict | None = None
 
 
 def _split_long(lines, heading, max_chars, boundary=None):
@@ -181,4 +183,27 @@ def chunk_document(pages, category, material_type, max_chars=MAX_CHARS):
         articles, rest = chunk_articles(pages, max_chars)
         if len(articles) >= 3 or (articles and material_type == "official"):
             return articles + chunk_pages(rest, max_chars, prefix="p"), "articles+pages"
-    return chunk_pages([(p.page, p.lines) for p in pages], max_chars), "pages"
+    chunks = []
+    for p in pages:
+        if not p.regions or category == 'recipe':
+            chunks.extend(chunk_pages([(p.page, p.lines)], max_chars))
+            continue
+        table_no = 0
+        for region in p.regions:
+            table_no += region.kind == 'table'
+            suffix = f'table{table_no}' if region.kind == 'table' else 'prose'
+            flags = tuple(f for f in p.flags if region.kind == 'table' or f not in (
+                'table_needs_review', 'table_pairing_mismatch',
+            ))
+            if region.table and region.table['reviewed']:
+                flags = tuple(f for f in flags if f not in ('table_needs_review', 'table_pairing_mismatch')) + ('table_reviewed',)
+            for c in chunk_pages([(p.page, region.lines)], max_chars):
+                c.section_key = c.section_key.replace(f'p{p.page}', f'p{p.page}.{suffix}', 1)
+                c.parent_section_key = f'p{p.page}.{suffix}'
+                c.quality_flags = flags
+                if region.table:
+                    c.table = region.table
+                    # Units, exceptions and nearby explanatory notes travel with every table part.
+                    c.text = '[표 주변 설명·단위·각주]\n' + '\n'.join(region.table['context_lines']) + '\n' + c.text
+                chunks.append(c)
+    return chunks, "pages"

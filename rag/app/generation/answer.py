@@ -5,6 +5,7 @@ from ..schemas import (
     Classification, InternalAnswer, InternalQuery, RagAnswer, Retrieval, Source, Usage,
 )
 from .model import Draft
+from .evidence_policy import NO_EVIDENCE_ANSWER, table_blocked, unsupported_numbers
 
 
 def assemble_answer(
@@ -19,12 +20,25 @@ def assemble_answer(
             raise upstream_error()
         selected.append(item)
 
-    if draft.status == "answered" and any(
-        {"table_needs_review", "table_pairing_mismatch"}.intersection(e.quality_flags) for e in selected
-    ):
+    if not selected:
         draft = draft.model_copy(update={
-            "status": "needs_review", "answer": "인용된 표의 행·열과 수치 검수가 필요합니다. 출처 원문을 확인해 주세요.",
+            'status': 'needs_review', 'answer': NO_EVIDENCE_ANSWER, 'steps': [],
+            'follow_up_questions': [], 'handoff_reason': '등록된 문서 근거 부족',
+        })
+    elif any(table_blocked(e) for e in selected):
+        locations = list(dict.fromkeys(
+            f'{e.metadata.title} PDF {e.metadata.page}쪽' if e.metadata.page else e.metadata.title
+            for e in selected if table_blocked(e)
+        ))
+        draft = draft.model_copy(update={
+            "status": "needs_review", "answer": '관련 표의 조건과 수치가 아직 검수되지 않아 답변을 확정할 수 없습니다. '
+                + ' / '.join(locations)[:1000] + '의 원문을 아래 출처에서 확인해 주세요.',
             "steps": [], "follow_up_questions": [], "handoff_reason": "표 추출 품질 검수 필요",
+        })
+    elif unsupported_numbers(draft, selected, context):
+        draft = draft.model_copy(update={
+            'status': 'needs_review', 'answer': '인용한 문서에서 답변의 수치를 확인하지 못해 정확한 기준을 안내하기 어렵습니다. 아래 출처 원문을 확인해 주세요.',
+            'steps': [], 'follow_up_questions': [], 'handoff_reason': '인용 근거와 수치 불일치',
         })
 
     if draft.status == "answered" and (not selected or any(e.truncated for e in selected)):
@@ -45,7 +59,8 @@ def assemble_answer(
             chunk_id=m.chunk_id, document_id=m.document_id, version_id=m.version_id,
             title=m.title, version=m.version, location=location, page=m.page, article=m.article,
             effective_from=m.effective_from, effective_until=m.effective_until,
-            material_type=m.material_type, is_demo=m.is_demo, excerpt=redact(item.text)[:1500],
+            material_type=m.material_type, is_demo=m.is_demo,
+            excerpt=('[미검수 표] 추출된 셀 대신 PDF 원문을 확인해 주세요.' if table_blocked(item) else redact(item.text)[:1500]),
             detail_url=detail_url, file_url=detail_url + "/file",
         ))
     answer = redact(draft.answer)
