@@ -8,5 +8,6 @@ app:
     secret: test-secret-test-secret-test-secret-0123456789
   internal-token: test-internal-token
   rag-url: http://localhost:1
+  voice-url: http://localhost:1
   document-store-dir: ${java.io.tmpdir}/frangizer-test-store
   demo-password: demo-password

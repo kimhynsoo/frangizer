@@ -562,6 +562,8 @@ Gateway는 `result`만 공개 응답의 `data`로 내보내고, `usage`·`retrie
 `multipart/form-data`, 파트 `audio`: WebM·WAV, 10MB 이하, 60초 이하.
 응답 `data = { text, duration_ms }`. 인식 텍스트는 화면에서 수정한 뒤 별도로 `/rag-query`에 보낸다(자동 질의 금지). 음성 원본은 저장하지 않는다.
 
+내부 연결(`voice/`, compose `--profile voice`): Java가 `POST http://voice:8008/internal/v1/stt`(`X-Internal-Token`, multipart `audio`)로 넘기고 `{"data":{text,duration_ms}}`를 받는다. 음성 서비스의 413·415·422(60초 초과)·503(모델 준비 중)은 같은 공개 오류로, 연결 실패는 503, 시간 초과(60초)는 504로 바꾼다. 음성 서비스를 띄우지 않으면 `/stt`는 503이고 화면은 텍스트 질문으로 안내한다.
+
 ### 9.2 `GET /health`
 
 인증 없음. `{"status":"ready"}`(200) 또는 `{"status":"not_ready"}`(503)만 반환. 주소·키·문서 수 등 상세는 노출하지 않는다.
