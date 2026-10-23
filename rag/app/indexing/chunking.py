@@ -42,6 +42,7 @@ class Chunk:
     pages: tuple = ()                   # 섹션이 걸친 PDF 쪽(시작 쪽 포함)
     quality_flags: tuple[str, ...] | None = None  # None은 기존 쪽 단위 표시 상속
     table: dict | None = None
+    legal_reviewed: bool = False        # 조문 단위 시점 검수 통과(legal_reviews.json)
 
 
 def _split_long(lines, heading, max_chars, boundary=None):
