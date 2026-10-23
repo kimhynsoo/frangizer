@@ -48,7 +48,7 @@ it("인식만으로 질문하지 않고 별도의 음성 확인 뒤에만 보낸
   confirm("보내기");
   await flushPromises();
   expect(wrapper.emitted("confirmed")).toEqual([
-    [{ text: "아이스 바닐라라테 시럽 몇 펌프야?", readAnswer: true }],
+    [{ text: "아이스 바닐라라테 시럽 몇 펌프야?", readAnswer: false }],
   ]);
 });
 it("확인 명령이 불명확하면 질문을 보내지 않고 검토 상태를 유지한다", async () => {
@@ -124,4 +124,35 @@ it("취소하면 부분 인식 결과 대신 원래 작성 중이던 내용을 �
   await button("음성 입력 취소").trigger("click");
   expect(wrapper.get("textarea").element.value).toBe("작성 중인 질문");
   expect(wrapper.emitted("confirmed")).toBeUndefined();
+});
+
+it("읽기 기능을 허용하지 않는 화면은 설정을 숨기고 전송에도 읽기 요청을 넣지 않는다", async () => {
+  wrapper = mount(VoiceInput, { props: { allowReadAloud: false } });
+  expect(wrapper.text()).not.toContain("답변 자동 읽기");
+  await wrapper.get("textarea").setValue("가맹 준비 항목 알려줘");
+  await wrapper.get("form").trigger("submit");
+  expect(wrapper.emitted("confirmed")[0][0].readAnswer).toBe(false);
+  expect(mocks.speak).not.toHaveBeenCalled();
+});
+
+it("자동 읽기는 기본 꺼짐이며 점주가 버튼으로 켠 경우에만 읽기를 요청한다", async () => {
+  wrapper = mount(VoiceInput);
+  expect(button("답변 자동 읽기 꺼짐").attributes("aria-pressed")).toBe(
+    "false",
+  );
+  await button("답변 자동 읽기 꺼짐").trigger("click");
+  expect(button("답변 자동 읽기 켜짐").attributes("aria-pressed")).toBe("true");
+  await wrapper.get("textarea").setValue("바닐라라테 제조 순서 알려줘");
+  await wrapper.get("form").trigger("submit");
+  expect(wrapper.emitted("confirmed")[0][0].readAnswer).toBe(true);
+  expect(wrapper.emitted("readPreference")[0]).toEqual([true]);
+});
+it("자동 읽기 버튼을 다시 누르면 읽기 요청을 끈다", async () => {
+  wrapper = mount(VoiceInput);
+  await button("답변 자동 읽기 꺼짐").trigger("click");
+  await button("답변 자동 읽기 켜짐").trigger("click");
+  await wrapper.get("textarea").setValue("우유 몇 mL야?");
+  await wrapper.get("form").trigger("submit");
+  expect(wrapper.emitted("confirmed")[0][0].readAnswer).toBe(false);
+  expect(wrapper.emitted("readPreference").at(-1)).toEqual([false]);
 });

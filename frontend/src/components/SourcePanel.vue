@@ -1,15 +1,49 @@
 <script setup>
-import { ref, watch, onUnmounted } from "vue";
+import { ref, computed, nextTick, watch, onUnmounted } from "vue";
 import * as api from "../api/documents";
 import { isMock } from "../api/client";
 import ErrorNotice from "./ErrorNotice.vue";
 import PageNav from "./PageNav.vue";
-const props = defineProps({ source: Object });
-const emit = defineEmits(["close"]);
+const props = defineProps({
+  source: Object,
+  requireRead: Boolean,
+  confirmBusy: Boolean,
+});
+const emit = defineEmits(["close", "readComplete", "confirm"]);
 const data = ref(null),
   error = ref(null),
   busy = ref(false),
-  page = ref(1);
+  page = ref(1),
+  panel = ref(null),
+  readPages = ref(new Set());
+const readComplete = computed(() => {
+  const total = data.value?.sections_meta?.total_pages;
+  return (
+    !busy.value &&
+    !error.value &&
+    total > 0 &&
+    Array.from({ length: total }, (_, i) => i + 1).every((p) =>
+      readPages.value.has(p),
+    )
+  );
+});
+function checkReadEnd() {
+  const el = panel.value;
+  if (
+    !props.requireRead ||
+    busy.value ||
+    error.value ||
+    !data.value?.sections?.length ||
+    !el ||
+    el.clientHeight <= 0
+  )
+    return;
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 4)
+    readPages.value.add(page.value);
+}
+watch(readComplete, (complete) => {
+  if (complete) emit("readComplete", { ...props.source });
+});
 const originalUrl = (value) => {
   try {
     const url = new URL(value);
@@ -36,7 +70,14 @@ async function load(next = 1) {
   } catch (e) {
     if (current === generation) error.value = e;
   } finally {
-    if (current === generation) busy.value = false;
+    if (current === generation) {
+      busy.value = false;
+      await nextTick();
+      if (current === generation && panel.value) {
+        panel.value.scrollTop = 0;
+        checkReadEnd();
+      }
+    }
   }
 }
 async function download() {
@@ -56,6 +97,7 @@ watch(
   () => props.source,
   () => {
     data.value = null;
+    readPages.value = new Set();
     load();
   },
   { immediate: true },
@@ -64,7 +106,9 @@ watch(
 <template>
   <div class="modal-backdrop" @click.self="$emit('close')">
     <section
+      ref="panel"
       class="source-panel"
+      @scroll="checkReadEnd"
       v-focus-trap="() => emit('close')"
       role="dialog"
       aria-modal="true"
@@ -83,6 +127,9 @@ watch(
         </button>
       </div>
       <h2 id="source-title">{{ source.title || "출처 상세" }}</h2>
+      <p v-if="requireRead" class="info-banner">
+        문서의 모든 페이지를 끝까지 내려 확인하면 확인 완료 버튼이 활성화됩니다.
+      </p>
       <ErrorNotice :error="error" @retry="load(page)" />
       <p v-if="busy" role="status">문서를 불러오는 중입니다…</p>
       <template v-if="data"
@@ -153,6 +200,9 @@ watch(
           </p>
           <p>{{ section.text }}</p>
         </article>
+        <p v-if="requireRead && !data.sections.length" class="info-banner">
+          확인할 문서 본문이 없어 확인을 완료할 수 없습니다.
+        </p>
         <PageNav :meta="data.sections_meta" :busy="busy" @change="load" />
         <h3>원천 출처</h3>
         <p>
@@ -183,6 +233,22 @@ watch(
           내려받습니다.
         </p></template
       >
+      <div v-if="requireRead" class="document-read-confirm">
+        <p role="status">
+          {{
+            readComplete
+              ? "문서를 끝까지 확인했습니다."
+              : `전체 ${data?.sections_meta?.total_pages || 0}페이지 중 ${readPages.size}페이지 확인`
+          }}
+        </p>
+        <button
+          class="button"
+          :disabled="!readComplete || confirmBusy"
+          @click="readComplete && emit('confirm')"
+        >
+          {{ confirmBusy ? "저장 중…" : "확인 완료" }}
+        </button>
+      </div>
     </section>
   </div>
 </template>

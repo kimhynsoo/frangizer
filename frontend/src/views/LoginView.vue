@@ -14,8 +14,8 @@ const auth = useAuth(),
   busy = ref(false),
   error = ref(null);
 const profiles = [
-  { role: "owner", name: "운영 점주", account: "demo-owner-a001" },
   { role: "prospect", name: "예비 점주", account: "demo-prospect" },
+  { role: "owner", name: "운영 점주", account: "demo-owner-a001" },
   { role: "hq", name: "본사 담당자", account: "demo-hq" },
 ];
 function fill(profile) {
