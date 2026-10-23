@@ -366,13 +366,13 @@ public class DocumentService {
                         .param("j", jobId).param("v", verId).param("now", Api.now()).update();
             });
             syncJob(jobId); // RAG가 꺼져 있어도 승인은 유지한다. 작업 조회 때 다시 제출한다.
-            String status = db.sql("SELECT status FROM index_jobs WHERE job_id = :j").param("j", jobId)
+            String status = db.sql("SELECT index_status FROM document_versions WHERE version_id = :v").param("v", verId)
                     .query(String.class).single();
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("document_id", docId);
             data.put("version_id", verId);
             data.put("lifecycle", "approved");
-            data.put("index_status", "running".equals(status) ? "running" : "queued");
+            data.put("index_status", status);
             data.put("job_id", jobId);
             return ResponseEntity.status(HttpStatus.ACCEPTED).body((Object) Api.ok(data));
         });
@@ -436,28 +436,36 @@ public class DocumentService {
         JsonNode data;
         try {
             data = rag.submitIndexJob(body);
+        } catch (RagClient.Rejected e) {
+            // 같은 요청은 다시 보내도 거부된다. 실패로 확정하고, 고친 내용은 새 판본·새 job_id로 색인한다.
+            log.warn("index job rejected job_id={} error={}", jobId, e.getMessage());
+            record(jobId, (String) v.get("version_id"), "failed", 0, null, "VALIDATION_ERROR", e.getMessage());
+            return;
         } catch (RuntimeException e) {
+            // 연결 장애·타임아웃 등 일시 실패: 상태를 그대로 두고 다음 조회 때 다시 제출한다.
             log.warn("index job submit failed job_id={} error={}", jobId, e.getMessage());
             return;
         }
         String status = data.path("status").asString("queued");
         if (!Set.of("queued", "running", "succeeded", "failed").contains(status)) return;
-        String indexStatus = switch (status) {
-            case "succeeded" -> "ready";
-            case "failed" -> "failed";
-            default -> status;
-        };
-        String revision = data.path("index_revision").isString() ? data.path("index_revision").asString() : null;
+        record(jobId, (String) v.get("version_id"), status, data.path("chunk_count").asInt(0),
+                data.path("index_revision").isString() ? data.path("index_revision").asString() : null,
+                data.path("error_code").isString() ? data.path("error_code").asString() : null,
+                data.path("error_message").isString() ? data.path("error_message").asString() : null);
+    }
+
+    private void record(String jobId, String versionId, String status, int chunkCount, String revision,
+                        String errorCode, String errorMessage) {
+        String indexStatus = "succeeded".equals(status) ? "ready" : status;
         tx.executeWithoutResult(s -> {
             db.sql("""
                     UPDATE index_jobs SET status = :s, chunk_count = :c, index_revision = :r, error_code = :ec,
                       error_message = :em, updated_at = :now WHERE job_id = :j""")
-                    .param("s", status).param("c", data.path("chunk_count").asInt(0)).param("r", revision)
-                    .param("ec", data.path("error_code").isString() ? data.path("error_code").asString() : null)
-                    .param("em", data.path("error_message").isString() ? data.path("error_message").asString() : null)
+                    .param("s", status).param("c", chunkCount).param("r", revision)
+                    .param("ec", errorCode).param("em", errorMessage)
                     .param("now", Api.now()).param("j", jobId).update();
             db.sql("UPDATE document_versions SET index_status = :is, index_revision = :r WHERE version_id = :v")
-                    .param("is", indexStatus).param("r", revision).param("v", v.get("version_id")).update();
+                    .param("is", indexStatus).param("r", revision).param("v", versionId).update();
         });
     }
 
