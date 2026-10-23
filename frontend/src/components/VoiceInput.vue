@@ -1,6 +1,15 @@
 <script setup>
 import { ref, computed, watch, onUnmounted } from "vue";
-import { Mic, Square, ArrowUp, RotateCcw, X, BookOpen } from "@lucide/vue";
+import {
+  Mic,
+  Square,
+  ArrowUp,
+  RotateCcw,
+  X,
+  BookOpen,
+  Volume2,
+  VolumeX,
+} from "@lucide/vue";
 import { isMock } from "../api/client";
 import { transcribe } from "../api/stt";
 import {
@@ -12,6 +21,8 @@ import {
 } from "../api/voice";
 const props = defineProps({
   disabled: Boolean,
+  readingAnswer: Boolean,
+  allowReadAloud: { type: Boolean, default: true },
   modelValue: { type: String, default: "" },
   asOf: { type: String, default: "" },
 });
@@ -20,6 +31,8 @@ const emit = defineEmits([
   "update:modelValue",
   "update:asOf",
   "active",
+  "readPreference",
+  "stopReading",
 ]);
 const engine = ref(isMock ? "browser" : "server"),
   phase = ref("idle"),
@@ -29,7 +42,7 @@ const engine = ref(isMock ? "browser" : "server"),
   level = ref(0),
   elapsed = ref(0),
   handsFree = ref(true),
-  readAnswer = ref(true),
+  readAnswer = ref(false),
   example = ref(false);
 const browserSupported = recognitionAvailable();
 const isCapturing = computed(() =>
@@ -172,7 +185,7 @@ async function start(retry = false) {
 function confirm() {
   if (props.disabled || !transcript.value.trim()) return;
   const text = transcript.value.trim(),
-    read = readAnswer.value;
+    read = props.allowReadAloud && readAnswer.value;
   cancel();
   emit("confirmed", { text, readAnswer: read });
 }
@@ -194,6 +207,7 @@ watch(
 );
 watch(transcript, (value) => emit("update:modelValue", value));
 watch(active, (value) => emit("active", value));
+watch(readAnswer, (value) => emit("readPreference", value));
 function submit() {
   if (["idle", "error", "review"].includes(phase.value)) confirm();
 }
@@ -305,6 +319,25 @@ onUnmounted(() => {
         /></label>
       </div>
       <div class="composer-controls">
+        <button
+          v-if="allowReadAloud && readingAnswer"
+          type="button"
+          class="button small reading-stop"
+          @click="$emit('stopReading')"
+        >
+          <Square :size="16" />읽기 중지
+        </button>
+        <button
+          v-if="allowReadAloud"
+          type="button"
+          class="button secondary small answer-read-toggle"
+          :aria-pressed="readAnswer"
+          :disabled="active"
+          @click="readAnswer = !readAnswer"
+        >
+          <component :is="readAnswer ? Volume2 : VolumeX" :size="16" />
+          {{ readAnswer ? "답변 자동 읽기 켜짐" : "답변 자동 읽기 꺼짐" }}
+        </button>
         <small>{{ transcript.length }} / 2,000</small>
         <button
           type="button"
@@ -352,13 +385,6 @@ onUnmounted(() => {
             :disabled="active || disabled"
           />말로 확인하기</label
         >
-        <label class="checkbox-label"
-          ><input
-            v-model="readAnswer"
-            type="checkbox"
-            :disabled="active || disabled"
-          />답변 읽어주기</label
-        >
       </div>
       <p v-if="engine === 'browser'" class="voice-engine-note">
         브라우저 제공 음성 인식 서비스가 처리하며 네트워크를 사용할 수 있습니다.
@@ -377,11 +403,11 @@ onUnmounted(() => {
       >
         녹음 없이 사용 흐름 보기
       </button>
+      <p class="voice-engine-note composer-voice-hint">
+        입력하거나 말한 내용은 위 입력창에서 수정할 수 있습니다. 말이 끝나면
+        메뉴명·HOT/ICED·수량을 확인한 뒤 “보내기”라고 말하세요. 최대 60초이며
+        취소·화면 이탈 시 마이크가 꺼집니다.
+      </p>
     </details>
-    <p class="voice-engine-note composer-voice-hint">
-      입력하거나 말한 내용은 위 입력창에서 수정할 수 있습니다. 말이 끝나면
-      메뉴명·HOT/ICED·수량을 확인한 뒤 “보내기”라고 말하세요. 최대 60초이며
-      취소·화면 이탈 시 마이크가 꺼집니다.
-    </p>
   </form>
 </template>
