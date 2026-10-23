@@ -1,3 +1,47 @@
+# 폴더규칙.md 4장 2번: 비밀값·생성 산출물은 커밋하지 않는다
+# feat/deploy-compose-skeleton(E)의 .gitignore 항목을 모두 포함한다
+
+# 환경변수 (.env.example만 커밋)
+.env
+.env.*
+**/.env
+!.env.example
+!**/.env.example
+
+# FAISS 인덱스·색인 산출물·업로드 (볼륨 /var/lib/frangizer/...에 둔다)
+*.faiss
+index.pkl
+faiss/
+faiss_db/
+revisions/
+uploads/
+**/uploads/
+var/
+
+# Python
+**/__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Node / Vue
+node_modules/
+dist/
+
+# Java / Gradle
+build/
+bin/
+.gradle/
+*.class
+
+# OS·에디터
+.DS_Store
+.idea/
+.vscode/
+
+# 도구 작업 폴더 (C 요청)
+.omc
 .DS_Store
 .omc/
 .env
