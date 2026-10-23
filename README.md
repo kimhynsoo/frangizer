@@ -6,7 +6,7 @@
 
 > ⚠️ SKALA AI 서비스 개발 미니 프로젝트의 **시연용 서비스**입니다. 실제 브랜드의 공식 서비스가 아니며, 레시피·점포·계정·문의 데이터는 팀이 만든 **합성 자료**입니다.
 >
-> 📌 현재 상태: 기획과 API 계약을 확정한 단계입니다. 서버·화면 구현은 진행 예정입니다.
+> 📌 현재 상태: 백엔드·RAG·화면이 구현되어 `docker compose`로 전체를 실행할 수 있습니다. 평가와 품질 개선을 진행 중입니다.
 
 ---
 
@@ -253,11 +253,25 @@ docker compose ps
 docker compose logs --tail 50 backend
 ```
 
-**문서 색인:** 질문에 답하려면 문서가 색인돼 있어야 합니다. 본사 계정으로 문서를 등록 → 승인(색인) → 배포합니다. 화면의 문서 관리에서 하거나, `scripts/seed_documents.py`로 `data/source/` 원본을 한 번에 등록할 수 있습니다(PR #6 병합 후 사용 가능, 사용법은 스크립트 상단 주석).
+### 3. 문서 등록 (처음 한 번)
 
-### 3. 동작 확인
+처음 띄운 직후에는 등록된 문서가 없어서 질문에 답할 수 없습니다. `data/source/`의 원본 13건을 등록 → 승인(색인) → 배포합니다. 1~2분 걸리며, 색인할 때 임베딩 API가 호출됩니다.
 
-브라우저에서 http://localhost 에 접속해 시연 계정(예: `demo-owner-a001`)과 `DEMO_PASSWORD`로 로그인합니다.
+```bash
+SEED_HQ_PASSWORD=<DEMO_PASSWORD 값> python3 scripts/seed_documents.py --apply --publish --base-url http://localhost/api/v1
+```
+
+- `--base-url`은 Nginx 주소(`http://localhost/api/v1`)를 씁니다. 스크립트 기본값(`localhost:8080`)은 배포 구성에서 외부에 열려 있지 않습니다. `WEB_PORT`를 바꿨다면 그 포트로 지정합니다.
+- `--publish`가 없으면 등록·색인만 하고 배포하지 않아 질문에 쓰이지 않습니다. 배포하면 문서마다 점포 공지가 하나씩 생깁니다.
+- 옵션 없이 실행하면 서버에 보내지 않고 대상 목록만 보여 줍니다. 다시 실행해도 끝난 문서는 건너뜁니다.
+- 레시피 v1.1(`data/staged/`)은 문서 변경 시연에서 본사 화면으로 직접 등록하므로 제외됩니다. 합성 가맹계약서는 `--include-optional`을 붙여야 포함됩니다.
+- `docker compose down -v`로 볼륨을 지우면 문서도 지워지므로 다시 실행합니다.
+
+화면에서 하나씩 등록할 수도 있습니다. 본사 계정으로 로그인해 문서 관리에서 등록 → 승인 → 색인 완료 확인 → 배포 순서로 진행합니다.
+
+### 4. 동작 확인
+
+브라우저에서 http://localhost 에 접속해 시연 계정(예: `demo-owner-a001`)과 `DEMO_PASSWORD`로 로그인한 뒤 "아이스 바닐라라테 시럽 몇 mL 넣어요?"를 물어봅니다. **바닐라 시럽 20 mL, 레시피 PDF 5쪽**이 나오면 전체 흐름이 동작하는 것입니다.
 
 스크립트로 확인할 때는 다음을 실행합니다. 비밀번호는 `.env`의 `DEMO_PASSWORD`를 자동으로 읽습니다.
 
@@ -265,7 +279,7 @@ docker compose logs --tail 50 backend
 ./scripts/smoke.sh http://localhost
 ```
 
-웹·API 상태, 토큰 없는 접근 거부(401), 로그인, `/me`, `/rag-query`를 순서대로 점검합니다. `/rag-query`는 모델 설정과 문서 색인이 끝나야 `200`입니다. 그 전에는 `SKIP_RAG=1 ./scripts/smoke.sh http://localhost`로 질문 항목을 건너뜁니다. 계정을 바꾸려면 `./scripts/smoke.sh <주소> <아이디> <비밀번호>`로 넘깁니다.
+웹·API 상태, 토큰 없는 접근 거부(401), 로그인, `/me`, `/rag-query`를 순서대로 점검합니다. `/rag-query`는 모델 설정과 3단계 문서 등록이 끝나야 `200`입니다. 그 전에는 `SKIP_RAG=1 ./scripts/smoke.sh http://localhost`로 질문 항목을 건너뜁니다. 계정을 바꾸려면 `./scripts/smoke.sh <주소> <아이디> <비밀번호>`로 넘깁니다.
 
 | 서비스 | 주소 | 외부 공개 |
 | --- | --- | --- |
@@ -274,7 +288,7 @@ docker compose logs --tail 50 backend
 | 상태 확인 | http://localhost/api/v1/health | O |
 | backend · rag · voice · db | 컨테이너 내부 네트워크 전용 | X |
 
-### 4. 개발용 실행
+### 5. 개발용 실행
 
 서비스를 직접 호출하며 개발할 때는 개발용 Compose를 겹쳐서 사용합니다. 내부 포트가 `127.0.0.1`에만 열립니다. **시연·배포에는 사용하지 않습니다.**
 
@@ -285,11 +299,12 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 | 서비스 | 개발용 주소 |
 | --- | --- |
 | backend (Java API) | http://localhost:8080/api/v1 |
+| Swagger UI | http://localhost:8080/swagger.html |
 | rag | http://localhost:8001 |
 | voice | http://localhost:8008 |
 | db | 127.0.0.1:3306 |
 
-### 5. 종료와 초기화
+### 6. 종료와 초기화
 
 ```bash
 docker compose down        # 컨테이너 종료 (DB·인덱스 유지)
@@ -301,7 +316,7 @@ docker compose down -v     # 컨테이너와 볼륨(DB, FAISS 인덱스, 업로�
 - 문서는 backend 업로드·승인을 거쳐서만 RAG에 들어갑니다. `data/source/`, `data/staged/`(미배포 판본), `eval/`, `docs/`는 컨테이너에 연결하지 않으며 자동 적재하지 않습니다. 구조화 레시피(`data/structured/`)만 읽기 전용으로 연결됩니다.
 - 업로드 문서, FAISS 인덱스, 질의 결과(SQLite)는 `frangizer_data` 볼륨(`/var/lib/frangizer`)에 저장되며, backend가 저장한 문서를 rag가 같은 볼륨에서 읽어 색인합니다. 저장소에는 커밋하지 않습니다.
 - 웹 이미지는 실제 API에 연결되도록 `VITE_USE_MOCK=false`로 빌드됩니다. 프론트를 샘플 데이터로만 보려면 `frontend/`에서 개발 서버를 따로 실행합니다.
-- backend 이미지는 저장소 루트를 빌드 범위로 사용하여 Swagger 스펙(`docs/api`)을 포함합니다.
+- backend 이미지는 저장소 루트를 빌드 컨텍스트로 써서 `docs/api` 계약(Swagger)을 함께 담습니다. Swagger UI는 외부에 공개하지 않으므로 개발용 실행(5단계)에서 확인합니다.
 - `voice` 프로필은 `voice/`에 `Dockerfile`이 생긴 뒤에 사용할 수 있습니다.
 - `.env`의 비밀번호를 바꾼 뒤에는 `docker compose down -v`로 DB를 초기화해야 반영됩니다. MariaDB는 처음 만들어질 때만 사용자를 만듭니다.
 - 80번 포트가 이미 쓰이고 있으면 `.env`의 `WEB_PORT`를 바꿉니다(예: `WEB_PORT=8088` → http://localhost:8088).
