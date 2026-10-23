@@ -24,6 +24,7 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
     implementation 'org.apache.pdfbox:pdfbox:3.0.5'
+    implementation 'org.webjars:swagger-ui:5.17.14'
     runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
@@ -34,3 +35,10 @@ dependencies {
 
 tasks.named('test') { useJUnitPlatform() }
 
+// 팀 합의 계약(docs/api)을 그대로 Swagger UI로 띄운다. 코드에서 스펙을 생성하지 않는다.
+processResources {
+    from('../docs/api') {
+        include 'public.openapi.yaml'
+        into 'static/openapi'
+    }
+}
