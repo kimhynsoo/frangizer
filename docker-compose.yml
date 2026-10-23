@@ -3,14 +3,18 @@
 # Only the web (nginx) port is published. For local debugging add docker-compose.dev.yml.
 #
 # Requires: backend/Dockerfile (C), rag/Dockerfile (A,B), frontend/package.json (D).
+# TODO(C): backend build context is ./backend, so docs/api (Swagger spec) is not inside the image yet.
 # Optional speech service: docker compose --profile voice up -d
 
 services:
   db:
     image: mariadb:11
     environment:
-      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD}
+      # App user owns the database (Flyway creates the schema). Root password is random and unused.
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
       MARIADB_DATABASE: ${DB_NAME:-frangizer}
+      MARIADB_USER: ${DB_USERNAME:-frangizer}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
@@ -24,15 +28,21 @@ services:
     build:
       context: ./backend
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mariadb://db:3306/${DB_NAME:-frangizer}
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      # Names follow backend/src/main/resources/application.yml
+      DB_URL: jdbc:mariadb://db:3306/${DB_NAME:-frangizer}
+      DB_USERNAME: ${DB_USERNAME:-frangizer}
+      DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
-      JWT_ISSUER: ${JWT_ISSUER}
-      JWT_AUDIENCE: ${JWT_AUDIENCE}
+      JWT_ISSUER: ${JWT_ISSUER:-frangizer}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-frangizer-api}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
-      RAG_BASE_URL: http://rag:8001
-      VOICE_BASE_URL: http://voice:8008
+      RAG_URL: http://rag:8001
+      DOCUMENT_STORE_DIR: /var/lib/frangizer
+      DEMO_PASSWORD: ${DEMO_PASSWORD}
+      # Same origin through nginx, so no CORS origins are needed in the deployed stack
+      CORS_ALLOWED_ORIGINS: ""
+    volumes:
+      - frangizer_data:/var/lib/frangizer   # shared with rag: uploaded documents
     depends_on:
       db:
         condition: service_healthy
@@ -50,15 +60,15 @@ services:
     environment:
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
       JWT_SECRET: ${JWT_SECRET}
-      JWT_ISSUER: ${JWT_ISSUER}
-      JWT_AUDIENCE: ${JWT_AUDIENCE}
+      JWT_ISSUER: ${JWT_ISSUER:-frangizer}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-frangizer-api}
       LLM_API_KEY: ${LLM_API_KEY}
       LLM_MODEL: ${LLM_MODEL}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL}
-      FAISS_DIR: ${FAISS_DIR:-/var/lib/frangizer/faiss}
-      DOCUMENT_STORE_DIR: ${DOCUMENT_STORE_DIR:-/var/lib/frangizer/documents}
+      FAISS_DIR: /var/lib/frangizer/faiss
+      DOCUMENT_STORE_DIR: /var/lib/frangizer
     volumes:
-      - rag_data:/var/lib/frangizer
+      - frangizer_data:/var/lib/frangizer   # shared with backend: documents + FAISS indexes
       # Only data/source is indexable. Never mount data/staged, eval or docs (folder rule 4.3).
       - ./data/source:/app/data/source:ro
     depends_on:
@@ -79,8 +89,8 @@ services:
     environment:
       WHISPER_MODEL: ${WHISPER_MODEL:-small}
       JWT_SECRET: ${JWT_SECRET}
-      JWT_ISSUER: ${JWT_ISSUER}
-      JWT_AUDIENCE: ${JWT_AUDIENCE}
+      JWT_ISSUER: ${JWT_ISSUER:-frangizer}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-frangizer-api}
     volumes:
       - whisper_cache:/root/.cache/huggingface
     restart: unless-stopped
@@ -98,5 +108,5 @@ services:
 
 volumes:
   db_data:
-  rag_data:
+  frangizer_data:
   whisper_cache:
