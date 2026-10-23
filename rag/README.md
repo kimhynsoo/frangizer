@@ -1,12 +1,21 @@
-# 상담 RAG API — 데이터 연결 전 구현
+# RAG 서비스
 
-현재 구현은 내부 `POST /rag-query`와 `GET /health`, JWT·서비스 인증, LangGraph 상담 흐름, LangChain 모델 어댑터, 출처·상태 검증입니다. 실제 데이터 검색 어댑터와 색인 API는 아직 연결하지 않았습니다. 실제 RAG 답변 품질과 Java·웹 E2E를 통과한 상태가 아닙니다.
+Java 게이트웨이(:8080)의 내부 요청을 FastAPI(:8001)가 처리합니다. 상담은 LangChain + LangGraph 단일 에이전트이며, 레시피도 기존 `/rag-query`를 사용합니다. 별도 레시피 RDB·공개 API는 추가하지 않았습니다.
 
-2026-10-23 사용자 확인에 따라 **MVP의 레시피도 기존 `/rag-query`로 처리**합니다. A의 구조화 JSON을 이용해 계량·단계를 저장된 값 그대로 반환하는 내부 빠른 경로를 추가할 계획이며, 레시피 RDB·별도 API·단계 전용 화면은 E2E 이후 확장으로 둡니다. 현재 실제 구조화 자료·인덱스 연결과 빠른 경로는 미구현입니다. 일반 상담은 짧은 핵심 답변, 확인·처리 순서, 적용 조건·예외, 문서 출처를 제공합니다. 조건·예외는 현행 계약의 `answer`, 추가 질문은 `follow_up_questions`에 담습니다.
+구현된 경로:
 
-## 설치와 자동 검사
+| 경로 | 인증 | 동작 |
+|---|---|---|
+| `POST /rag-query` | 서비스 토큰 + 원 사용자 JWT | 허용 판본 검색·상담 또는 구조화 레시피 응답 |
+| `POST /internal/v1/index-jobs` | 서비스 토큰 | 202 작업 접수·동일 요청의 기존 상태 반환 |
+| `GET /internal/v1/index-jobs/{job_id}` | 서비스 토큰 | 작업 상태 조회 |
+| `GET /health` | 서비스 토큰 | 모델 설정·유효한 검색 산출물 준비 여부 |
 
-Python 3.11을 사용합니다. 가상환경·인증값·실행 상태 파일은 Git에서 제외됩니다.
+현행 C 백엔드의 **같은 job_id로 POST를 반복하는 조회 방식**도 지원합니다. 후속 GET 조회로 전환해도 RAG 변경 없이 연결할 수 있습니다. `docs/api` 계약은 변경하지 않았습니다. 문서 상세의 `sections` 반환을 위한 새 내부 API는 아직 없습니다.
+
+## 설치
+
+Python 3.11, Java 검사에는 Java 25를 사용합니다.
 
 ```bash
 cd /Users/inwoopark/workspace/ai-service/ai-service-project/frangizer/rag
@@ -16,94 +25,78 @@ python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-자동 검사는 외부 모델·임베딩 API를 호출하지 않습니다. LangGraph 실행에는 모델 대역을 사용하며, LangChain의 도구 호출·구조화 응답 직렬화도 HTTP 모의 응답으로 검사합니다. 이는 실제 모델이 질문을 이해하고 적절한 도구를 선택하는지에 대한 평가가 아닙니다.
+외부 모델·임베딩 호출 없이 API, 그래프, 실제 PDF 추출·FAISS 생성/검색, 판본/권한 경계, 레시피 응답을 검사합니다. 기본 검사에서 실제 Java JWT 검사 3개는 건너뜁니다. 다음 절차로 Java까지 검사할 수 있습니다.
 
-## 터미널에서 테스트 서버 실행
+SWIG 확장 모듈의 알려진 초기화 경고 3종만 `pytest.ini`에서 제외하고 나머지 경고는 실패 처리합니다. FAISS import 시 이 경고를 일괄 `-W error`로 올리면 네이티브 확장 초기화가 비정상 종료할 수 있으므로 위 명령을 사용합니다.
 
-기존 교수님 RAG의 8001 포트와 겹치지 않도록 이 테스트는 **127.0.0.1:8011**에서 실행합니다.
+## Java와 실제 HTTP 연동 검사
 
-첫 터미널:
+기존 서버·DB·`.env`를 사용하지 않습니다. 임시 H2, 임시 저장 폴더, 빈 포트를 사용하고 종료 시 정리합니다. 실제 Java 인증·업무 코드와 FastAPI·PDF·FAISS를 연결하되 임베딩은 테스트 대역이며 LLM 호출은 금지합니다.
 
 ```bash
 cd /Users/inwoopark/workspace/ai-service/ai-service-project/frangizer/rag
 source .venv/bin/activate
-python -m tests.demo prepare
-set -a
-source .demo/credentials.env
-set +a
-python -m uvicorn tests.demo:create_demo_app --factory --host 127.0.0.1 --port 8011 --workers 1
+# macOS; 다른 OS에서는 설치된 Java 25의 JAVA_HOME을 지정
+export JAVA_HOME=$(/usr/libexec/java_home -v 25)
+export PATH="$JAVA_HOME/bin:$PATH"
+mkdir -p .demo
+../backend/gradlew -p ../backend \
+  -I "$PWD/tests/java/classpath.init.gradle" -q testClasses ragInteropClasspath \
+  > .demo/backend-classpath.txt
+export FRANGIZER_JAVA_CP="$(tail -n 1 .demo/backend-classpath.txt)"
+python -m pytest -q
+python -m tests.backend_smoke
 ```
 
-두 번째 터미널:
+확인 범위: 역할별 Java JWT → PDF 업로드 → 승인 → 비동기 색인 → 기존 POST 폴링 → 배포 → 점주·본사 질문 → **20 mL / 출처 PDF 5쪽** → 같은 요청 재사용 → 예비 점주 접근 차단. 테스트 안에서 v1.1을 명시적으로 업로드·승인·배포하고, **2026-10-26 00:00 KST 전후 20→15 mL 전환**도 확인합니다. staged 폴더를 자동 색인하는 기능은 없습니다.
+
+이 검사를 실제 임베딩 검색·LLM 상담 품질, MariaDB 또는 브라우저 E2E 통과로 해석하지 않습니다.
+
+## 실제 서비스 실행
+
+루트 `.env.example`을 참고해 **루트 `.env` 한 곳**에 backend/RAG 공통 값을 설정합니다. 실제 비밀값은 Git에 넣지 않습니다. RAG 전용 항목은 `rag/.env.example`에 정리했습니다.
+
+- `JWT_SECRET`: Java와 동일한 UTF-8 문자열, 최소 32바이트. Base64 디코딩하지 않습니다.
+- `INTERNAL_TOKEN`, `JWT_ISSUER=frangizer`, `JWT_AUDIENCE=frangizer-api`를 공유합니다. 알고리즘은 HS256으로 고정합니다.
+- `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL`을 명시합니다. 임베딩 어댑터는 `text-embedding-3-small` / `text-embedding-3-large`를 지원하며 자동 기본 모델은 없습니다. 별도 `EMBEDDING_API_KEY`도 사용할 수 있습니다.
+- `DOCUMENT_STORE_DIR`: Java와 같은 절대 경로. 공유 볼륨은 `/var/lib/frangizer`입니다. 로컬에서는 쓰기 가능한 저장소의 `var/` 절대 경로를 사용할 수 있습니다.
+- `FAISS_DIR`: 기본 `/var/lib/frangizer/faiss`. `RAG_STATE_DB`: 질의 결과 재사용용 SQLite 경로.
+- `RECIPE_STRUCTURED_FILE`: 선택 사항. 구조화 경로를 켜려면 저장소의 `data/structured/demo_cafe_recipes.json` 절대 경로를 지정합니다.
 
 ```bash
 cd /Users/inwoopark/workspace/ai-service/ai-service-project/frangizer/rag
-source .demo/credentials.env
-curl -sS http://127.0.0.1:8011/rag-query \
-  -H 'Content-Type: application/json' \
-  -H "X-Internal-Token: $INTERNAL_TOKEN" \
-  -H "Authorization: Bearer $DEMO_USER_TOKEN" \
-  --data-binary @.demo/request.json | .venv/bin/python -m json.tool
+source .venv/bin/activate
+python -m uvicorn app.bootstrap:create_service --factory \
+  --env-file ../.env --host 127.0.0.1 --port 8001 --workers 1
 ```
 
-예상 결과는 HTTP 200, `data.result.status=answered`, 테스트용 항목 A와 합성 자료 출처입니다. 모델은 고정된 대역이고 질문을 바꾸어도 실제 상담을 하지 않습니다. 응답 헤더 `X-Frangizer-Test-Mode: synthetic-fixture`로 테스트 실행임을 표시합니다.
+Docker에서는 내부 네트워크 접근을 위해 `--host 0.0.0.0`을 사용합니다. Java의 `RAG_URL`은 실행 위치에 맞춰 `http://localhost:8001` 또는 `http://rag:8001`로 설정합니다. 브라우저는 Java API만 호출합니다.
 
-인증 누락 검사:
+실행 순서는 RAG → Java → 본사 로그인·문서 업로드·승인 → 색인 성공 확인 → 배포 → 점주 질문입니다. 최초 색인 전 health는 503입니다. 설정·유효한 산출물이 준비되면 200이며, health가 외부 제공자의 인증·답변 품질까지 검증하지는 않습니다. 모델 설정이 없으면 질문은 503, 임베딩 설정이 없으면 색인은 `EMBEDDING_NOT_CONFIGURED`로 실패합니다.
 
-```bash
-curl -i http://127.0.0.1:8011/rag-query \
-  -H 'Content-Type: application/json' --data-binary @.demo/request.json
-```
+## 검색과 색인 경계
 
-예상 결과는 HTTP 401입니다.
+- 저장 키는 `DOCUMENT_STORE_DIR` 아래 `documents/...`만 허용하고 경로 이탈·심볼릭 링크 이탈·원본 SHA256 불일치를 차단합니다.
+- A의 PDF/TXT/MD 추출·분할을 사용합니다. FAISS, chunks.jsonl, build-manifest, quality-report를 한 revision으로 원자적으로 저장합니다. 같은 입력·설정은 재사용하고 모델·차원 변경은 새 revision을 만듭니다.
+- 서비스는 **단일 worker**, 색인 동시 실행 1개·대기 포함 최대 16개입니다. 같은 작업 ID와 다른 내용은409, 과부하는503입니다. 재시작 시 남은 queued/running은 failed + `INTERRUPTED`가 됩니다. 새 job_id로 다시 요청해야 합니다.
+- 검색은 Java가 전달한 `(document_id, version_id, index_revision)`에만 접근합니다. 브랜드·역할·조각 적용 기간을 **유사도 순위 계산 전에** 제한합니다. 허용 범위를 자동으로 넓히지 않습니다.
+- 모델·차원·정규화 방식·본문 해시·조각 매핑을 검사합니다. pickle을 읽지 않습니다. 조회 최대 5조각, 배치 최대 12,000자이며 원문 섹션 조회도 이미 확보한 조각에 한정합니다. 현재 긴 조문의 다른 분할 조각을 자동 확장하지는 않습니다.
+- `legal_temporal_reviewed=false`인 공식 자료를 인용하면 `[시행일 미검수]`를 답변 앞에 붙입니다. 표 구조 검수·OCR·법률적 정확성 평가는 별도로 필요합니다.
 
-준비 상태 검사:
+## 레시피의 생성 없는 응답
 
-```bash
-curl -i http://127.0.0.1:8011/health -H "X-Internal-Token: $INTERNAL_TOKEN"
-```
+구조화 파일을 설정하면 명확한 단일 메뉴·기본 1잔의 계량·제조 순서를 저장된 값으로 반환합니다. 양·단위 환산을 하지 않습니다. 미지원 질문은 상담 에이전트가 처리합니다.
 
-테스트 모드는 실제 검색이 연결되지 않았으므로 HTTP 503과 `{"status":"not_ready"}`를 반환합니다. API 흐름 테스트 성공을 실제 RAG ready로 표시하지 않습니다. 토큰은 생성 시점부터 한 시간 동안 유효하며, 만료 시 `prepare`를 다시 실행하고 두 터미널에서 환경변수를 다시 읽습니다. 테스트 서버는 Ctrl+C로 종료합니다.
+구조화 JSON 자체를 배포 증거로 쓰지 않습니다. **Java의 허용 판본 + 브랜드/역할/시점 + 색인 원본 SHA256 + 쪽 번호 + 본문의 재료량·순서 대조**를 통과한 경우에만 사용합니다. A의 파일은 draft이고, 본문 대조가 온도 구간·모든 옵션의 의미까지 검수하는 것은 아니므로 시연 전 데이터 담당자의 원문 검수도 필요합니다.
 
-## 데이터 담당자 답변 후 연결할 부분
+예: `아이스 바닐라라떼 시럽 얼마 넣어?`는 정확한 값·출처를 반환합니다. 온도 미지정이어도 요청한 재료량이 HOT/ICED에서 같으면 공통 값을 바로 반환합니다. 양이 다르면 온도를 확인하고, `아이스 딸기라떼 다음 단계?`는 완료 단계를 확인합니다. `1단계 완료, 다음 단계?`는 저장된 2단계를 반환합니다. 여러 메뉴 비교·용량 변경·옵션 변경·펌프 환산은 빠른 경로로 강제 처리하지 않습니다. 대화의 예전 답변을 완료 단계로 간주하지 않습니다.
 
-- `app/retrieval/base.py`의 `Retriever`에 실제 구현을 주입합니다. `search(query, context)`와 `read_sections(chunk_ids, context)`를 제공합니다.
-- 검색 전 `(document_id, version_id, index_revision)`, 브랜드·역할·적용일로 제한합니다. Java가 점포 범위까지 검증해 전달한 `allowed_versions`를 넓히지 않습니다. 반환된 자료에도 동일한 검사를 적용합니다.
-- 본문은 같은 UTF-8 본문의 `content_sha256`과 일치해야 합니다. 기본 한 배치는 최대 20조각·12,000자, 한 조각은 12,000자입니다. 더 긴 자료의 분할·잘림 표시는 A/B가 합의합니다. 잘린 근거로 완전한 답변을 승인하지 않습니다.
-- 원문 섹션 조회는 이번 요청에서 확보한 조각과 같은 판본·인덱스·섹션에 한정합니다. 실제 답변에 사용한 조각만 출처에 넣습니다.
-- 임베딩 모델·차원·거리 방식·로딩 포맷은 담당자 답변 이후 확정합니다. 아직 특정 FAISS 파일 구조를 요구하지 않습니다.
-- 실제 모델 연결은 `LangChainModel.from_env()`를 사용해 `CounselAgent(model, retriever)`에 주입합니다. `LLM_MODEL`과 `LLM_API_KEY`를 명시하며 자동으로 기존 프로젝트의 비밀값을 읽지 않습니다. 이번 작업에서는 실제 모델 호출을 하지 않았습니다.
-- `create_app(auth=..., agent=..., state_db=...)`에 완성된 에이전트를 주입합니다. 기본 `app.main:create_app` 팩토리는 인증 설정만 있으면 시작되지만 검색 연결 전 질의·health는 503을 반환합니다.
-- 색인 작업과 원문 추출은 데이터 담당 영역입니다. `/internal/v1/index-jobs`는 이번 단계에 구현하지 않았습니다.
+응답 계약은 동일하며 이 경로는 `retrieval.llm_called=false`, 모델/임베딩 토큰 0입니다. 문맥에서 생략된 메뉴를 복원하는 질문은 현재 일반 상담 경로를 이용합니다.
 
-## 인증·재시도·제한
+## 상담·재시도
 
-JWT는 고정 설정된 HS256으로 서명·`exp`·`iss`·`aud`·`sub`를 검사합니다. JWT의 `role`, `brand_id`, `store_id`(null 포함), `permissions`가 본문 `principal`과 같아야 하고 `rag:ask`가 필요합니다. 기존 교수님 인증 서버의 단순 JWT를 그대로 호환한다고 가정하지 않습니다. Java 담당자와 새 명세의 클레임을 맞춰야 합니다. 서명키는 최소 32바이트로 설정합니다.
+상담 도구는 문서 검색과 확보한 조각 읽기뿐입니다. 외부 검색·임의 SQL·승인/환불 실행 도구는 없습니다. 기본 예산은 모델 최대4회, 도구3회, 검색2회이며 요청 deadline을 적용합니다. 일반적인 단일 검색 흐름은 판단→검색→판단→최종 출력으로 모델3회가 들 수 있습니다.
 
-C가 전달한 연결 설정은 `JWT_ALGORITHM=HS256`, `JWT_ISSUER=frangizer`, `JWT_AUDIENCE=frangizer-api`입니다. `JWT_SECRET`·`INTERNAL_TOKEN`은 별도 비밀값으로 주입합니다. 실제 JWT 서명키의 UTF-8/Base64 처리 방식과 hq/prospect의 null `store_id` 표현은 C 코드·역할별 테스트 토큰으로 대조해야 합니다. C의 구현 완료 보고를 이번 RAG와의 통합 검증 완료로 보지는 않습니다.
+같은 사용자·question_id·attempt_id의 결과/안전한 오류는 SQLite에 24시간 재사용하고 동시 요청을 합칩니다. 실패 재실행은 새 attempt_id를 사용합니다. 여러 worker/복제본을 지원하는 공유 작업 저장소는 아직 없습니다.
 
-공유 볼륨 제안은 backend·rag 모두 `/var/lib/frangizer`에 마운트하고 `DOCUMENT_STORE_DIR=/var/lib/frangizer`, `FAISS_DIR=/var/lib/frangizer/faiss`를 사용합니다. ASCII 저장 키 `documents/{document_id}/{version_id}.pdf`를 `DOCUMENT_STORE_DIR` 아래에 결합합니다. A·C·E의 실제 코드·Compose에서 경로와 매체별 확장자를 확인한 후 사용합니다.
-
-기본 예산은 모델 호출 최대 4회, 도구 최대 3회, 검색 최대 2회입니다. 마지막 모델 호출을 최종 초안에 남겨둡니다. 요청 `deadline_ms`(1~30초)를 강제하며 장애는 502/503/504로 반환합니다. 본문 초과·권한 위반 등 오류가 원문 입력이나 비밀값을 되돌려주지 않도록 합니다.
-
-같은 사용자·`question_id`·`attempt_id`의 성공 결과와 처리 오류를 SQLite에 24시간 보존합니다. 같은 쌍·다른 요청은 409입니다. 동일 요청의 동시 실행은 한 모델 실행으로 합칩니다. 실패 후 실제 재실행은 새 `attempt_id`를 사용합니다. 저장에는 원문 질문 대신 요청 해시와 결과·안전한 오류를 사용합니다.
-
-**현재 실행 범위는 단일 worker·단일 프로세스입니다.** 여러 worker·복제본에서의 실행 중 중복 방지·중단된 요청 복구는 후속 공유 작업 저장소가 필요합니다. SQLite는 요청 결과 재사용 저장소이며 별도 대화 기억 저장소가 아닙니다. 대화는 Java가 최근 6턴을 전달합니다.
-
-모델 입력과 응답의 인식 가능한 전화번호·이메일·명시적 고객명/주문번호는 마스킹합니다. 이는 모든 비정형 개인정보를 식별한다는 보장이 아니므로 Java의 마스킹과 실제 입력 평가도 필요합니다. 자동 외부 추적은 활성화하지 않았으며 테스트 시에도 `LANGSMITH_TRACING`을 켜지 않습니다.
-
-## 코드 위치
-
-| 위치 | 역할 |
-|---|---|
-| `app/main.py`, `app/api/` | 서버 팩토리·질의·준비 상태·오류 응답 |
-| `app/auth.py`, `app/schemas.py` | 인증과 현행 API 모델 |
-| `app/generation/agent.py` | LangGraph의 판단·도구 실행·최종 초안 흐름 |
-| `app/generation/model.py` | LangChain 도구·구조화 초안 모델 연결 |
-| `app/generation/answer.py` | 실제 출처 연결·응답 상태 검사 |
-| `app/retrieval/base.py` | 검색 경계·자료 권한·본문 해시 검증 |
-| `app/replay.py`, `app/privacy.py` | 재시도·중복 실행 방지·식별정보 마스킹 |
-| `prompts/counsel.md` | 상담 범위와 근거 사용 규칙 |
-| `tests/` | 모의 자료·모델·오프라인 계약/흐름 검사·테스트 서버 |
-
-API 기준은 `../docs/api/`입니다. 새 공개 API나 필드를 추가하지 않았습니다. 출처 검사 통과가 모든 문장의 의미적 정확성을 보장하지는 않으며, 실제 문서·모델 연결 후 별도 품질 평가가 필요합니다.
+인식 가능한 연락처·명시적 고객명/주문번호를 모델 입력·응답에서 마스킹하고 자동 외부 추적은 끕니다. 모든 비정형 개인정보를 식별한다는 보장은 아닙니다. 출처 검증이 모든 답변 문장의 의미적 정확성을 보장하지는 않습니다.

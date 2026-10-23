@@ -57,7 +57,9 @@ def check_principal(principal: Principal, claims: dict):
         claims.get("sub") == principal.user_id
         and claims.get("role") == principal.role
         and claims.get("brand_id") == principal.brand_id
-        and "store_id" in claims and claims["store_id"] == principal.store_id
+        # JJWT omits null claims. Only non-owner accounts may have no store.
+        and claims.get("store_id") == principal.store_id
+        and (principal.role != "owner" or principal.store_id is not None)
         and isinstance(permissions, list) and all(isinstance(x, str) for x in permissions)
         and set(permissions) == set(principal.permissions)
         and "rag:ask" in principal.permissions

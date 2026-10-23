@@ -11,6 +11,7 @@ class Evidence:
     text: str
     metadata: IndexedChunkMetadata
     truncated: bool = False
+    legal_temporal_unreviewed: bool = False
 
 
 @dataclass(frozen=True)

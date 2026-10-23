@@ -10,6 +10,7 @@ from .model import Draft
 def assemble_answer(
     context: InternalQuery, draft: Draft, evidence: dict[str, Evidence], *,
     latency_ms: int, candidate_count: int, usage: Usage,
+    llm_called: bool = True,
 ) -> InternalAnswer:
     selected: list[Evidence] = []
     for chunk_id in dict.fromkeys(draft.used_chunk_ids):
@@ -40,6 +41,8 @@ def assemble_answer(
             detail_url=detail_url, file_url=detail_url + "/file",
         ))
     answer = redact(draft.answer)
+    if any(e.legal_temporal_unreviewed for e in selected):
+        answer = "[시행일 미검수] 인용 자료의 조문별 시행일 검수가 완료되지 않았습니다. " + answer
     if any(s.is_demo for s in sources):
         label = "합성 시연 레시피 기준입니다. " if draft.category == "recipe" else "합성 시연 자료 기준입니다. "
         answer = label + answer
@@ -59,6 +62,6 @@ def assemble_answer(
         classification=Classification(category=draft.category, topic_id=None, status="pending", version="counsel-v1"),
         usage=usage, retrieval=Retrieval(
             candidate_count=candidate_count, used_chunk_ids=tuple(s.chunk_id for s in sources),
-            llm_called=True,
+            llm_called=llm_called,
         ),
     )

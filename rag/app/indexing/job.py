@@ -98,12 +98,14 @@ def select_pages(policy, page_count):
     return pages
 
 
-def revision_id(req: IndexJobRequest, embedding_model):
+def revision_id(req: IndexJobRequest, embedding_model, dimension):
     """같은 판본·같은 파일·같은 분할·같은 모델 → 같은 revision. 하나라도 바뀌면 새 revision."""
     basis = _canonical({
         "version_id": req.version_id, "sha256": req.source.sha256,
         "indexing_policy": req.indexing_policy.model_dump(mode="json", exclude_unset=True),
         "chunker": CHUNKER_VERSION, "embedding_model": embedding_model,
+        "dimension": dimension, "document_id": req.document_id, "category": req.category,
+        "original_source": req.original_source.model_dump(mode="json"),
         "effective_from": req.effective_from.isoformat(),
         "metadata": [req.title, req.version, req.visibility, req.material_type, req.is_demo, req.brand_id],
     })
@@ -249,6 +251,8 @@ def write_revision(index_root: Path, req, chunks, report, embedder, rev):
             raise EmbeddingError("EMBEDDING_FAILED", f"임베딩 호출 실패: {type(e).__name__}") from e
         if vectors.shape != (len(records), embedder.dim):
             raise IndexJobFailed("INDEX_VALIDATION_FAILED", f"임베딩 결과 형태 불일치: {vectors.shape}")
+        if not np.isfinite(vectors).all() or np.any(np.linalg.norm(vectors, axis=1) == 0):
+            raise IndexJobFailed("INDEX_VALIDATION_FAILED", "유효하지 않은 임베딩 벡터")
         faiss.normalize_L2(vectors)
         index = faiss.IndexFlatIP(embedder.dim)
         index.add(vectors)
@@ -282,8 +286,8 @@ def write_revision(index_root: Path, req, chunks, report, embedder, rev):
 def default_roots():
     """C 회신(2026-10-23): 볼륨 하나를 backend·rag 모두 /var/lib/frangizer에 마운트.
     저장 키 documents/{document_id}/{version_id}.pdf는 DOCUMENT_STORE_DIR 기준 상대 경로다."""
-    return (Path(os.environ.get("DOCUMENT_STORE_DIR", "/var/lib/frangizer")),
-            Path(os.environ.get("FAISS_DIR", "/var/lib/frangizer/faiss")))
+    return (Path(os.environ.get("DOCUMENT_STORE_DIR") or "/var/lib/frangizer"),
+            Path(os.environ.get("FAISS_DIR") or "/var/lib/frangizer/faiss"))
 
 
 class JobStore:
@@ -320,7 +324,7 @@ class JobStore:
 
 
 def run_index_job(payload: dict, *, document_root: Path | None = None, index_root: Path | None = None,
-                  embedder=None) -> dict:
+                  embedder=None, _reserved=False) -> dict:
     """IndexJob(dict, 계약 형식)을 돌려준다. 입력 스키마 오류는 ValidationError(→ 422),
     같은 job_id·다른 내용은 JobConflict(→ 409). 그 밖의 실패는 status=failed로 기록한다."""
     req = IndexJobRequest.model_validate(payload)
@@ -333,12 +337,13 @@ def run_index_job(payload: dict, *, document_root: Path | None = None, index_roo
     if existing:
         if existing["request_hash"] != rhash:
             raise JobConflict(f"job_id {req.job_id}에 다른 내용의 작업이 이미 있다")
-        return existing["job"]
+        if not (_reserved and existing["job"]["status"] == "queued"):
+            return existing["job"]
 
-    created = _now()
+    created = datetime.fromisoformat(existing["job"]["created_at"]) if existing else _now()
     job = IndexJob(job_id=req.job_id, document_id=req.document_id, version_id=req.version_id, status="running",
                    chunk_count=0, index_revision=None, error_code=None, error_message=None,
-                   created_at=created, updated_at=created)
+                   created_at=created, updated_at=_now())
     store.put(req.job_id, {"request_hash": rhash, "job": job.model_dump(mode="json")})
     try:
         path = resolve_storage_key(document_root, req.source.storage_key)
@@ -346,7 +351,7 @@ def run_index_job(payload: dict, *, document_root: Path | None = None, index_roo
             raise IndexJobFailed("CHECKSUM_MISMATCH", "파일 sha256이 요청과 다르다")
         chunks, report = build_chunks(req, path)
         embedder = embedder or load_embedder()
-        rev = revision_id(req, embedder.model)
+        rev = revision_id(req, embedder.model, embedder.dim)
         _, count = write_revision(index_root, req, chunks, report, embedder, rev)
         job = job.model_copy(update={"status": "succeeded", "chunk_count": count, "index_revision": rev,
                                      "updated_at": _now()})

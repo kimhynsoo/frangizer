@@ -11,10 +11,7 @@ from ..schemas import AnswerEnvelope, InternalQuery
 router = APIRouter()
 
 
-@router.post("/rag-query", response_model=AnswerEnvelope)
-async def query(request: Request):
-    check_service_token(request.headers.get("X-Internal-Token"), request.app.state.auth)
-    claims = check_jwt(request.headers.get("Authorization"), request.app.state.auth)
+async def read_json(request: Request):
     if request.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
         raise ServiceError(415, "UNSUPPORTED_MEDIA_TYPE", "JSON 요청이 필요합니다.")
     try:
@@ -28,6 +25,14 @@ async def query(request: Request):
         raw = json.loads(b"".join(chunks))
     except (json.JSONDecodeError, UnicodeDecodeError):
         raise ServiceError(400, "MALFORMED_REQUEST", "JSON 형식을 확인해 주세요.") from None
+    return raw
+
+
+@router.post("/rag-query", response_model=AnswerEnvelope)
+async def query(request: Request):
+    check_service_token(request.headers.get("X-Internal-Token"), request.app.state.auth)
+    claims = check_jwt(request.headers.get("Authorization"), request.app.state.auth)
+    raw = await read_json(request)
     context = InternalQuery.model_validate(raw)
     request.state.question_id = context.question_id
     check_principal(context.principal, claims)

@@ -8,26 +8,31 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from starlette.exceptions import HTTPException
 
-from .api import health, query
+from .api import health, index_jobs, query
 from .auth import AuthSettings
 from .errors import ServiceError
 from .replay import ReplayStore
 from .schemas import InternalQuery
 
 
-def create_app(*, auth: AuthSettings | None = None, agent=None, state_db: str | None = None, demo=False):
+def create_app(*, auth: AuthSettings | None = None, agent=None, state_db: str | None = None, demo=False, index_service=None):
     settings = auth or AuthSettings.from_env()
 
     @asynccontextmanager
     async def lifespan(app):
-        app.state.replay = ReplayStore(state_db or os.environ.get("RAG_STATE_DB", "/var/lib/frangizer/rag/query-results.sqlite3"))
+        app.state.replay = ReplayStore(state_db or os.environ.get("RAG_STATE_DB") or "/var/lib/frangizer/rag/query-results.sqlite3")
+        if index_service is not None:
+            index_service.recover()
         try:
             yield
         finally:
+            if index_service is not None:
+                await index_service.close()
             await app.state.replay.close()
 
     app = FastAPI(title="Frangizer internal counseling API", lifespan=lifespan)
     app.state.auth, app.state.agent, app.state.demo = settings, agent, demo
+    app.state.index_service = index_service
 
     @app.middleware("http")
     async def request_id(request: Request, call_next):
@@ -69,6 +74,7 @@ def create_app(*, auth: AuthSettings | None = None, agent=None, state_db: str | 
 
     app.include_router(query.router)
     app.include_router(health.router)
+    app.include_router(index_jobs.router)
 
     def openapi():
         if app.openapi_schema is None:
@@ -86,6 +92,15 @@ def create_app(*, auth: AuthSettings | None = None, agent=None, state_db: str | 
             }}}
             operation["security"] = [{"ServiceAuth": [], "BearerAuth": []}]
             schema["paths"]["/health"]["get"]["security"] = [{"ServiceAuth": []}]
+            index_schema = index_jobs.IndexJobRequest.model_json_schema(ref_template="#/components/schemas/{model}")
+            schema["components"]["schemas"].update(index_schema.pop("$defs", {}))
+            schema["components"]["schemas"]["IndexJobRequest"] = index_schema
+            for path in ("/internal/v1/index-jobs", "/internal/v1/index-jobs/{job_id}"):
+                operation = schema["paths"][path]["post" if path.endswith("index-jobs") else "get"]
+                operation["security"] = [{"ServiceAuth": []}]
+            schema["paths"]["/internal/v1/index-jobs"]["post"]["requestBody"] = {
+                "required": True, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/IndexJobRequest"}}},
+            }
             app.openapi_schema = schema
         return app.openapi_schema
 
