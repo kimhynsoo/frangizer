@@ -16,6 +16,16 @@ const router = createRouter({
       meta: { permission: "rag:ask", title: "질문하기" },
     },
     {
+      path: "/faq",
+      name: "faq",
+      component: () => import("../views/FaqView.vue"),
+      meta: {
+        roles: ["prospect"],
+        permission: "rag:ask",
+        title: "자주 묻는 질문",
+      },
+    },
+    {
       path: "/documents",
       name: "documents",
       component: () => import("../views/DocumentsView.vue"),
