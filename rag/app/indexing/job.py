@@ -126,13 +126,15 @@ def build_chunks(req: IndexJobRequest, path: Path):
             import pymupdf
             page_count = pymupdf.open(path).page_count
             pages_sel = select_pages(req.indexing_policy, page_count)
-            pages, _ = extract_pdf(path, pages_sel, parse_tables=req.category != 'recipe')
-            pages, _ = extract_pdf(path, pages_sel)
             review = load_reviews(req.source.sha256)
+            covered = {n for t in (review or {}).get('tables', []) for n in t.get('covers', t['pages'])}
+            # A's source-bound transcription replaces table candidates after validation below.
+            # Keep geometric region boundaries, but do not run Camelot/pdfplumber on those pages again.
+            pages, _ = extract_pdf(path, pages_sel, parse_tables=req.category != 'recipe', skip_table_pages=covered)
             if review:
-                pdf = pymupdf.open(path)
-                needed = {n for t in review["tables"] for n in t["pages"] if n <= page_count}
-                raw = {n: pdf[n - 1].get_text() for n in needed}
+                with pymupdf.open(path) as pdf:
+                    needed = {n for t in review["tables"] for n in t["pages"] if n <= page_count}
+                    raw = {n: pdf[n - 1].get_text() for n in needed}
                 report["table_review"] = apply_reviews(pages, raw, review)
         else:
             if req.indexing_policy.include_pages or req.indexing_policy.exclude_pages:

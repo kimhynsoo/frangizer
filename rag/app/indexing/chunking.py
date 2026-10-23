@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from .extract import PAIR_MARK
 
-CHUNKER_VERSION = "chunker-v4"  # v4: 로컬 표 셀 추출·본문 분리·원문에 묶인 검수 표시
+CHUNKER_VERSION = "chunker-v5"  # v5: A의 원문 연결 표 기록을 우선하고 표 재추출 생략
 MAX_CHARS = 1500
 
 ARTICLE_RE = re.compile(r"^제(\d+)조(?:의(\d+))?(?:\s?\(([^)]*)\)|\s+삭제)")
