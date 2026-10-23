@@ -5,7 +5,6 @@
 # Only the web (nginx) port is published. For local debugging add docker-compose.dev.yml.
 # Required values must be set in .env; compose stops with a message if one is empty.
 
-
 services:
   db:
     image: mariadb:11
@@ -77,6 +76,7 @@ services:
       FAISS_DIR: /var/lib/frangizer/faiss
       RAG_STATE_DB: /var/lib/frangizer/rag/query-results.sqlite3
       RECIPE_STRUCTURED_FILE: /app/data/structured/demo_cafe_recipes.json
+      TABLE_REVIEW_FILE: /app/data/structured/table_reviews.json
     volumes:
       - frangizer_data:/var/lib/frangizer   # shared with backend: documents, FAISS revisions, query results
       # Documents reach RAG only through backend upload → approve. Raw data/source, data/staged,

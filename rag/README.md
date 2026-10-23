@@ -100,6 +100,33 @@ Docker에서는 내부 네트워크 접근을 위해 `--host 0.0.0.0`을 사용�
 
 ## 검색과 색인 경계
 
+### 표 추출·검수와 근거 없는 답변
+
+- 본문은 PyMuPDF로 읽고, 표의 영역을 제한하여 Camelot Lattice로 셀을 추출합니다. pdfplumber 결과와 원문 글자 보존 정도를 비교해 후보를 고릅니다. 보존 점수는 행·열의 의미가 맞다는 보장이 아닙니다. 기존 소비자분쟁 표의 좌표 기반 짝짓기와 구조화 레시피 경로는 유지합니다.
+- 일반 쪽 분할에서 표 밖 설명은 별도 조각으로 저장하고 표 때문에 같은 쪽의 설명까지 차단하지 않습니다. 조 단위 법령은 기존 보수적인 쪽 경고를 유지합니다. 표 조각에는 열 이름·행 값과 주변 설명(단위·각주)을 함께 넣습니다. 경계를 분리하지 못하면 기존 경고를 유지합니다.
+- 로컬 추출 표는 검수 전까지 `table_needs_review`를 유지합니다. 생성 모델에는 그 조각의 본문을 보내지 않고 문서명·쪽·검수 표시만 보냅니다. 미검수 표를 인용하면 상태에 관계없이 원문 확인 안내로 교체하고 출처 카드에도 미검수 표시를 합니다.
+- 출처가 0개인 초안은 `answered`여도 502로 처리하지 않고 `needs_review`와 고정 안내로 바꿉니다. 모델이 만든 상식·처리 순서·추가 질문은 제거합니다. 위조된 출처·권한 위반·실제 제공자 장애는 계속 오류입니다.
+- 답변에 인용 근거에 없는 숫자가 들어가면 수치 불일치 안내로 바꿉니다. 이는 수치 복사 오류를 막는 보조 검사이며 모든 사실·행 연결의 정확성을 보장하지 않습니다.
+- 검수 파일 `data/structured/table_reviews.json`은 source SHA·표 SHA·검수자·검수 시각을 기록합니다. PDF나 표 추출 결과가 바뀌면 기존 승인을 재사용하지 않습니다. Docker에서는 구조화 자료와 함께 읽기 전용으로 연결합니다.
+
+표 후보 내보내기와 원문 대조 후 승인(저장소 루트에서 실행):
+
+```bash
+uv pip install --python rag/.venv/bin/python -r rag/requirements.txt
+cd rag
+.venv/bin/python -m app.indexing.tables \
+  ../data/source/빽다방_정보공개서_v2025-11-21.pdf \
+  --pages 19 20 21 --output .demo/table-candidates.json
+.venv/bin/python -m app.indexing.table_review .demo/table-candidates.json
+# PDF 원문과 해당 표의 rows/context_lines를 대조한 뒤, 선택한 표 하나만 기록:
+.venv/bin/python -m app.indexing.table_review .demo/table-candidates.json \
+  --approve --table-sha 선택한_표_SHA --reviewer 검수자명
+```
+
+**기존 배포 자료는 재시작만으로 바뀌지 않습니다.** 새 분할 버전(`chunker-v4`)과 검수 기록은 새 색인 revision을 만듭니다. Java가 그 revision을 허용 판본으로 지정해야 검색에 반영됩니다. 현재 Java 승인은 draft 전용이므로 이미 published인 같은 판본의 재색인·revision 전환은 C와 연결해야 합니다. 기존 인덱스·배포 상태를 직접 덮어쓰지 않습니다. 새 문서는 기존 등록 → 승인 → 색인 → 배포 흐름을 사용합니다.
+
+이미 저장된 대화·같은 attempt_id의 재사용 결과는 재생성하지 않습니다. 화면 확인은 새 대화에서 진행합니다.
+
 - 저장 키는 `DOCUMENT_STORE_DIR` 아래 `documents/...`만 허용하고 경로 이탈·심볼릭 링크 이탈·원본 SHA256 불일치를 차단합니다.
 - A의 PDF/TXT/MD 추출·분할을 사용합니다. FAISS, chunks.jsonl, build-manifest, quality-report를 한 revision으로 원자적으로 저장합니다. 같은 입력·설정은 재사용하고 모델·차원 변경은 새 revision을 만듭니다.
 - 서비스는 **단일 worker**, 색인 동시 실행 1개·대기 포함 최대 16개입니다. 같은 작업 ID와 다른 내용은409, 과부하는503입니다. 재시작 시 남은 queued/running은 failed + `INTERRUPTED`가 됩니다. 새 job_id로 다시 요청해야 합니다.
