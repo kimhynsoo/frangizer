@@ -62,8 +62,9 @@ class FakeBackend:
             msg = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(
                 b"Content-Type: " + headers["Content-Type"].encode() + b"\r\n\r\n" + body)
             fields = {p.get_param("name", header="content-disposition"): p for p in msg.iter_parts()}
-            # 브라우저 FormData처럼 문자셋 표기 없는 UTF-8 필드. Spring Boot 기본(UTF-8 강제)과 같이 읽는다.
-            meta = json.loads(fields["metadata"].get_payload(decode=True).decode("utf-8"))
+            part = fields["metadata"]
+            assert part.get_content_type() == "application/json" and part.get_content_charset() == "utf-8"
+            meta = json.loads(part.get_payload(decode=True).decode("utf-8"))
             data = fields["file"].get_payload(decode=True)
             self.uploads.append((meta, fields["file"].get_filename(), len(data)))
             doc = meta["document_id"]

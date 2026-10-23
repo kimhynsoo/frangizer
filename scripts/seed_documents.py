@@ -18,8 +18,8 @@
 - 서버에 같은 판본이 다른 파일로 있거나, 서버가 준 ID가 합의 규칙(manifest server)과 다르면 멈춘다.
 - 비밀번호는 환경변수로만 받고 출력하지 않는다. 표준 라이브러리만 쓴다.
 
-API는 docs/api/public.openapi.yaml 기준이다(POST /login, /documents, .../approve, .../publish,
-GET /documents/{doc_id}/versions, /index-jobs/{job_id}).
+API는 docs/api/public.openapi.yaml 기준이고, C 백엔드(PR #3)의 DocumentController·DocumentService와 대조했다
+(version_id={document_id}-{version}, 판본 목록에 sha256, 승인 후 GET /index-jobs가 RAG 재전송·상태 동기화).
 """
 import argparse
 import hashlib
@@ -93,11 +93,13 @@ def q(s):
 
 
 def multipart(fields, file_field, file_path, file_name, media_type):
+    """fields: {이름: JSON 문자열}. 백엔드는 metadata를 @RequestPart String으로 받으므로
+    문자셋을 명시해 서버 기본 문자셋과 상관없이 UTF-8로 읽히게 한다."""
     boundary = "----frangizer-seed-" + uuid.uuid4().hex
     parts = []
     for name, value in fields.items():
-        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n'.encode()
-                     + value.encode() + b"\r\n")
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n'
+                     f"Content-Type: application/json; charset=utf-8\r\n\r\n".encode() + value.encode() + b"\r\n")
     parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{file_field}"; filename="{file_name}"\r\n'
                  f"Content-Type: {media_type}\r\n\r\n".encode() + file_path.read_bytes() + b"\r\n")
     parts.append(f"--{boundary}--\r\n".encode())
