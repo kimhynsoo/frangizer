@@ -1,14 +1,14 @@
 {
   "manifest_version": 2,
   "updated_at": "2026-10-23",
-  "status": "초안 — 형식은 A·C·E 합의 전",
+  "status": "v2 형식 합의(A·C, 2026-10-23). E 확인 전",
   "conventions": {
-    "local_key": "저장소 안에서만 쓰는 문서 계열 키. 서버 document_id/version_id와 같다고 가정하지 않음",
-    "server": "C의 등록 API가 발급한 ID를 등록 후 기록. 등록 전에는 null",
+    "local_key": "저장소 안에서 쓰는 문서 계열 키. C 합의로 서버 document_id로 그대로 쓴다",
+    "server": "C 회신(2026-10-23): document_id는 local_key와 같은 값으로 미리 지정, version_id는 {document_id}-{version}, 저장 키는 documents/{document_id}/{version_id}.pdf. 원래 한글 파일명은 서버 file_name에 보존",
     "repo_status": "저장소 위치(source/staged)일 뿐 승인·배포 상태가 아님. lifecycle은 서버가 관리",
     "upload_metadata": "POST /documents의 UploadMetadata 필드 이름 그대로. document_id는 서버 발급이라 넣지 않음",
-    "visibility": "최소 허용 역할 제안값(공개 가맹·법령 자료 prospect, 레시피 owner). 등록 시 hq가 확정",
-    "effective_from": "시간대 포함 RFC 3339. 법령·고시는 PDF 머리글 시행일 0시(KST). 조문별 시행일은 미검수",
+    "visibility": "최소 허용 역할. C 확정(2026-10-23): 법령·고시·심사지침·정보공개서·합성 계약서 prospect, 레시피 owner",
+    "effective_from": "시간대 포함 RFC 3339. 법령·고시는 PDF 머리글 시행일 0시(KST). 합성 계약서는 적용일이 없어 수집일(C 회신). 조문별 시행일은 미검수",
     "effective_until": "미포함 종료 시각(이 시각부터 적용 안 됨). null이면 종료 시점 미지정. 서버에서는 publish 때 설정",
     "acquired_on": "수집일(PDF 생성일 기준). 시행일·적용일을 대신하지 않음",
     "legal_temporal_reviewed": "조문별 시행일·경과규정 검수 전이라 전부 false. 형식 통과용으로 true로 바꾸지 않음",
@@ -57,8 +57,9 @@
       "effective_until": null,
       "exclude_reason": "목차",
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "food-sanitation-act",
+        "version_id": "food-sanitation-act-2026-10-08",
+        "storage_key": "documents/food-sanitation-act/food-sanitation-act-2026-10-08.pdf"
       },
       "review": []
     },
@@ -100,8 +101,9 @@
       "effective_until": null,
       "exclude_reason": "목차",
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "food-sanitation-act-decree",
+        "version_id": "food-sanitation-act-decree-2026-08-18",
+        "storage_key": "documents/food-sanitation-act-decree/food-sanitation-act-decree-2026-08-18.pdf"
       },
       "review": []
     },
@@ -139,8 +141,9 @@
       "effective_until": null,
       "exclude_reason": null,
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "food-sanitation-act-rule",
+        "version_id": "food-sanitation-act-rule-2026-09-01",
+        "storage_key": "documents/food-sanitation-act-rule/food-sanitation-act-rule-2026-09-01.pdf"
       },
       "review": []
     },
@@ -182,8 +185,9 @@
       "effective_until": null,
       "exclude_reason": "목차",
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "franchise-act",
+        "version_id": "franchise-act-2026-10-02",
+        "storage_key": "documents/franchise-act/franchise-act-2026-10-02.pdf"
       },
       "review": []
     },
@@ -224,8 +228,9 @@
       "effective_until": null,
       "exclude_reason": "목차",
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "franchise-act-decree",
+        "version_id": "franchise-act-decree-2026-08-04",
+        "storage_key": "documents/franchise-act-decree/franchise-act-decree-2026-08-04.pdf"
       },
       "review": []
     },
@@ -263,8 +268,9 @@
       "effective_until": null,
       "exclude_reason": null,
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "franchise-act-decree-annex",
+        "version_id": "franchise-act-decree-annex-2028-01-01",
+        "storage_key": "documents/franchise-act-decree-annex/franchise-act-decree-annex-2028-01-01.pdf"
       },
       "review": []
     },
@@ -304,8 +310,9 @@
       "effective_until": null,
       "exclude_reason": "표지",
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "franchise-unfair-practice-guideline",
+        "version_id": "franchise-unfair-practice-guideline-2024-03-25",
+        "storage_key": "documents/franchise-unfair-practice-guideline/franchise-unfair-practice-guideline-2024-03-25.pdf"
       },
       "review": []
     },
@@ -345,8 +352,9 @@
       "effective_until": null,
       "exclude_reason": "목차",
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "paik-franchise-disclosure",
+        "version_id": "paik-franchise-disclosure-2025-11-21",
+        "storage_key": "documents/paik-franchise-disclosure/paik-franchise-disclosure-2025-11-21.pdf"
       },
       "review": []
     },
@@ -388,8 +396,9 @@
       "effective_until": null,
       "exclude_reason": "목차",
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "consumer-basic-act",
+        "version_id": "consumer-basic-act-2026-09-11",
+        "storage_key": "documents/consumer-basic-act/consumer-basic-act-2026-09-11.pdf"
       },
       "review": []
     },
@@ -429,8 +438,9 @@
       "effective_until": null,
       "exclude_reason": "목차",
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "consumer-dispute-standard",
+        "version_id": "consumer-dispute-standard-2025-12-18",
+        "storage_key": "documents/consumer-dispute-standard/consumer-dispute-standard-2025-12-18.pdf"
       },
       "review": []
     },
@@ -470,8 +480,9 @@
       "effective_until": null,
       "exclude_reason": "중복 — consumer-dispute-standard 2쪽 본문과 같은 내용",
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "consumer-dispute-standard-annex",
+        "version_id": "consumer-dispute-standard-annex-2025-12-18",
+        "storage_key": "documents/consumer-dispute-standard-annex/consumer-dispute-standard-annex-2025-12-18.pdf"
       },
       "review": []
     },
@@ -512,8 +523,9 @@
       "effective_until": null,
       "exclude_reason": "목차",
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "ecommerce-act-withdrawal",
+        "version_id": "ecommerce-act-withdrawal-2026-07-21",
+        "storage_key": "documents/ecommerce-act-withdrawal/ecommerce-act-withdrawal-2026-07-21.pdf"
       },
       "review": []
     },
@@ -533,7 +545,7 @@
         "material_type": "synthetic",
         "is_demo": true,
         "visibility": "prospect",
-        "effective_from": null,
+        "effective_from": "2026-10-23T00:00:00+09:00",
         "change_summary": "최초 등록",
         "original_source": {
           "title": "가맹카페 A 가맹계약서 (합성)",
@@ -551,11 +563,12 @@
       "effective_until": null,
       "exclude_reason": null,
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "demo-franchise-contract",
+        "version_id": "demo-franchise-contract-1.0",
+        "storage_key": "documents/demo-franchise-contract/demo-franchise-contract-1.0.pdf"
       },
       "review": [
-        "effective_from 미정 — 업로드 전 결정 필요(UploadMetadata 필수)"
+        "시연 질문에 필요할 때만 등록(C 회신). effective_from은 수집일. 계약의 synthetic 설명을 '합성 자료'로 넓히는 C의 계약 PR 필요"
       ]
     },
     {
@@ -592,8 +605,9 @@
       "effective_until": "2026-10-26T00:00:00+09:00",
       "exclude_reason": null,
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "demo-cafe-recipes",
+        "version_id": "demo-cafe-recipes-1.0",
+        "storage_key": "documents/demo-cafe-recipes/demo-cafe-recipes-1.0.pdf"
       },
       "review": [],
       "derived_from": {
@@ -645,8 +659,9 @@
       "effective_until": null,
       "exclude_reason": null,
       "server": {
-        "document_id": null,
-        "version_id": null
+        "document_id": "demo-cafe-recipes",
+        "version_id": "demo-cafe-recipes-1.1",
+        "storage_key": "documents/demo-cafe-recipes/demo-cafe-recipes-1.1.pdf"
       },
       "review": [],
       "derived_from": {
