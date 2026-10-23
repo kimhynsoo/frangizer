@@ -12,7 +12,9 @@ section_key·chunk_id 형식은 B와 합의 전 초안이다.
 import re
 from dataclasses import dataclass
 
-CHUNKER_VERSION = "chunker-v1"
+from .extract import PAIR_MARK
+
+CHUNKER_VERSION = "chunker-v2"  # v2: 분쟁표 행 짝, 분할 순서·쪽 정보
 MAX_CHARS = 1500
 
 ARTICLE_RE = re.compile(r"^제(\d+)조(?:의(\d+))?(?:\s?\(([^)]*)\)|\s+삭제)")
@@ -35,6 +37,9 @@ class Chunk:
     effective_from: str | None = None   # 'YYYY-MM-DD'. None이면 문서 적용일
     effective_until: str | None = None  # 'YYYY-MM-DD'(미포함). None이면 종료 미지정
     temporal_note: str | None = None    # 자동 판단하지 못한 조문별 시행일 표기
+    parts: int = 1                      # 같은 섹션을 나눈 조각 수 (part는 1부터)
+    parent_section_key: str = ""        # 나누기 전 섹션 키. 나머지 조각을 모아 원문 섹션을 복원할 때 쓴다
+    pages: tuple = ()                   # 섹션이 걸친 PDF 쪽(시작 쪽 포함)
 
 
 def _split_long(lines, heading, max_chars, boundary=None):
@@ -87,7 +92,7 @@ def chunk_articles(pages, max_chars=MAX_CHARS):
             if ADDENDA_RE.match(line):
                 addenda_no += 1
                 cur = {"key": f"add{addenda_no}", "page": p.page, "article": None,
-                       "heading": line, "lines": [line]}
+                       "heading": line, "lines": [line], "pages": [p.page]}
                 sections.append(cur)
                 continue
             m = ARTICLE_RE.match(line)
@@ -98,10 +103,12 @@ def chunk_articles(pages, max_chars=MAX_CHARS):
                 title = line.split(")")[0] + ")" if m.group(3) is not None else label
                 cur = {"key": _article_key(m, addenda_no), "page": p.page, "article": label,
                        "heading": f"{chapter} > {title}" if chapter else title,
-                       "lines": [line]}
+                       "lines": [line], "pages": [p.page]}
                 sections.append(cur)
             elif cur is not None:
                 cur["lines"].append(line)
+                if cur["pages"][-1] != p.page:
+                    cur["pages"].append(p.page)
             else:
                 leftover.append(line)  # 첫 조 이전 머리말
         if leftover:
@@ -121,7 +128,8 @@ def chunk_articles(pages, max_chars=MAX_CHARS):
             chunks.append(Chunk(section_key=key if len(parts) == 1 else f"{key}.p{n}",
                                 page=s["page"], article=s["article"], heading=s["heading"],
                                 text="\n".join(body), part=n, effective_from=s.get("from"),
-                                effective_until=s.get("until"), temporal_note=s.get("note")))
+                                effective_until=s.get("until"), temporal_note=s.get("note"),
+                                parts=len(parts), parent_section_key=key, pages=tuple(s["pages"])))
     return chunks, rest
 
 
@@ -156,12 +164,14 @@ def chunk_pages(page_lines, max_chars=MAX_CHARS, prefix="p"):
         if not lines:
             continue
         heading = lines[0][:80]
-        parts = _split_long(lines, heading, max_chars)
+        # 표를 행으로 다시 쓴 쪽(`⇒` 줄)은 분쟁유형과 해결기준 사이에서 끊지 않는다
+        parts = _split_long(lines, heading, max_chars, boundary=lambda l: not l.startswith(PAIR_MARK))
+        base = f"{prefix}{page}" if page is not None else prefix
         for n, body in enumerate(parts, 1):
-            base = f"{prefix}{page}" if page is not None else prefix
             chunks.append(Chunk(section_key=base if len(parts) == 1 else f"{base}.{n}",
                                 page=page, article=None, heading=heading,
-                                text="\n".join(body), part=n))
+                                text="\n".join(body), part=n, parts=len(parts), parent_section_key=base,
+                                pages=(page,) if page is not None else ()))
     return chunks
 
 
