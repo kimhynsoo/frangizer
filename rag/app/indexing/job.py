@@ -170,12 +170,21 @@ def build_chunks(req: IndexJobRequest, path: Path):
     return chunks, report
 
 
+def chunk_id(rev, section_key):
+    """`chk-{revision 12자}-{section_key}`. 100자(계약 Id 상한)를 넘으면 section_key를 해시로 줄인다.
+    자르기만 하면 서로 다른 조각이 같은 ID가 될 수 있어 쓰지 않는다."""
+    cid = f"chk-{rev[4:16]}-{section_key}"
+    if len(cid) > 100:
+        cid = f"chk-{rev[4:16]}-h{hashlib.sha256(section_key.encode()).hexdigest()[:24]}"
+    return cid
+
+
 def _chunk_records(req, chunks, rev, embedding_model):
     records = []
     for c in chunks:
         text = c.text
         meta = IndexedChunkMetadata(
-            chunk_id=f"chk-{rev[4:16]}-{c.section_key}"[:100],
+            chunk_id=chunk_id(rev, c.section_key),
             brand_id=req.brand_id, document_id=req.document_id, version_id=req.version_id,
             index_revision=rev, title=req.title, version=req.version, visibility=req.visibility,
             material_type=req.material_type, is_demo=req.is_demo, page=c.page, article=c.article,
@@ -270,9 +279,16 @@ def write_revision(index_root: Path, req, chunks, report, embedder, rev):
         raise
 
 
+def default_roots():
+    """C 회신(2026-10-23): 볼륨 하나를 backend·rag 모두 /var/lib/frangizer에 마운트.
+    저장 키 documents/{document_id}/{version_id}.pdf는 DOCUMENT_STORE_DIR 기준 상대 경로다."""
+    return (Path(os.environ.get("DOCUMENT_STORE_DIR", "/var/lib/frangizer")),
+            Path(os.environ.get("FAISS_DIR", "/var/lib/frangizer/faiss")))
+
+
 class JobStore:
     """작업 기록: index_root/jobs/{job_id}.json. 재시작 후에도 남는다.
-    동시 요청·재시작 중 running 처리 방식은 B·C·E와 합의 필요(현재는 단일 프로세스 가정)."""
+    단일 프로세스 가정. 재시작 시 recover_interrupted()로 running 작업을 실패 처리한다."""
 
     def __init__(self, index_root: Path):
         self.dir = index_root / "jobs"
@@ -287,11 +303,30 @@ class JobStore:
         tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, self.dir / f"{job_id}.json")
 
+    def recover_interrupted(self):
+        """서버 시작 시 호출(B의 startup). running으로 남은 작업 → failed + INTERRUPTED (C 회신).
+        재색인은 C가 새 job_id로 다시 요청한다. 남은 임시 revision 디렉터리도 지운다."""
+        recovered = []
+        for p in self.dir.glob("*.json"):
+            rec = json.loads(p.read_text(encoding="utf-8"))
+            if rec["job"]["status"] in ("queued", "running"):
+                rec["job"].update(status="failed", error_code="INTERRUPTED",
+                                  error_message="서버 재시작으로 작업이 중단되었다", updated_at=_now().isoformat())
+                self.put(rec["job"]["job_id"], rec)
+                recovered.append(rec["job"]["job_id"])
+        for tmp in (self.dir.parent / "revisions").glob(".tmp-*"):
+            shutil.rmtree(tmp, ignore_errors=True)
+        return recovered
 
-def run_index_job(payload: dict, *, document_root: Path, index_root: Path, embedder=None) -> dict:
+
+def run_index_job(payload: dict, *, document_root: Path | None = None, index_root: Path | None = None,
+                  embedder=None) -> dict:
     """IndexJob(dict, 계약 형식)을 돌려준다. 입력 스키마 오류는 ValidationError(→ 422),
     같은 job_id·다른 내용은 JobConflict(→ 409). 그 밖의 실패는 status=failed로 기록한다."""
     req = IndexJobRequest.model_validate(payload)
+    if document_root is None or index_root is None:
+        env_doc, env_idx = default_roots()
+        document_root, index_root = document_root or env_doc, index_root or env_idx
     store = JobStore(index_root)
     rhash = request_hash(req)
     existing = store.get(req.job_id)

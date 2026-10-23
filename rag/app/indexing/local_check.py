@@ -18,16 +18,16 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def request_from_manifest(doc):
-    """manifest 항목 → IndexJobRequest. ID·저장 키는 검수용 임시값(서버 발급 아님)."""
-    meta = doc["upload_metadata"]
-    vid = f"{doc['local_key']}-{meta['version']}"
+    """manifest 항목 → IndexJobRequest. ID·저장 키는 C와 합의한 규칙(manifest server), job·brand만 임시값."""
+    meta, server = doc["upload_metadata"], doc["server"]
+    vid = server["version_id"]
     return IndexJobRequest.model_validate({
-        "job_id": f"local-{vid}", "brand_id": "local-check", "document_id": doc["local_key"], "version_id": vid,
+        "job_id": f"local-{vid}", "brand_id": "local-check", "document_id": server["document_id"], "version_id": vid,
         "title": meta["title"], "version": meta["version"], "category": meta["category"],
         "material_type": meta["material_type"], "is_demo": meta["is_demo"], "visibility": meta["visibility"],
-        "effective_from": meta["effective_from"] or "1970-01-01T00:00:00+09:00",
+        "effective_from": meta["effective_from"],
         "original_source": meta["original_source"], "indexing_policy": meta["indexing_policy"],
-        "source": {"storage_key": f"documents/{vid}.pdf", "sha256": doc["file"]["sha256"],
+        "source": {"storage_key": server["storage_key"], "sha256": doc["file"]["sha256"],
                    "media_type": doc["file"]["media_type"]},
     })
 
@@ -56,8 +56,6 @@ def main():
             row.update(result="failed", error_code=e.code, error=str(e))
             summary.append(row)
             continue
-        if doc["upload_metadata"]["effective_from"] is None:
-            report["warnings"].append({"code": "EFFECTIVE_FROM_MISSING", "message": "manifest에 적용일 없음(검수용 임시값 사용)"})
         report["chunks_preview"] = [
             {"section_key": c.section_key, "page": c.page, "article": c.article, "chars": len(c.text),
              "head": c.text[:120]} for c in chunks]
