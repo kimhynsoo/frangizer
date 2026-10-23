@@ -1,11 +1,9 @@
-# docker compose up -d --build
+# docker compose up -d --build        → db + backend + rag + web
+# Optional speech service:  docker compose --profile voice up -d --build
+#
 # Services call each other by service name (db, backend, rag, voice), never localhost.
 # Only the web (nginx) port is published. For local debugging add docker-compose.dev.yml.
-#
-# Default stack (works now): db + backend + web
-#   docker compose up -d --build
-# With RAG once rag/Dockerfile exists (A,B):  docker compose --profile rag up -d --build
-# Optional speech service:                    docker compose --profile voice up -d --build
+# Required values must be set in .env; compose stops with a message if one is empty.
 #
 # TODO(C): backend build context is ./backend, so docs/api (Swagger spec) is not inside the image yet.
 
@@ -17,7 +15,7 @@ services:
       MARIADB_RANDOM_ROOT_PASSWORD: "1"
       MARIADB_DATABASE: ${DB_NAME:-frangizer}
       MARIADB_USER: ${DB_USERNAME:-frangizer}
-      MARIADB_PASSWORD: ${DB_PASSWORD}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?.env에 DB_PASSWORD 값을 넣으세요}
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
@@ -34,14 +32,14 @@ services:
       # Names follow backend/src/main/resources/application.yml
       DB_URL: jdbc:mariadb://db:3306/${DB_NAME:-frangizer}
       DB_USERNAME: ${DB_USERNAME:-frangizer}
-      DB_PASSWORD: ${DB_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
+      DB_PASSWORD: ${DB_PASSWORD:?.env에 DB_PASSWORD 값을 넣으세요}
+      JWT_SECRET: ${JWT_SECRET:?.env에 JWT_SECRET (32바이트 이상) 값을 넣으세요}
       JWT_ISSUER: ${JWT_ISSUER:-frangizer}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-frangizer-api}
-      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?.env에 INTERNAL_TOKEN 값을 넣으세요}
       RAG_URL: http://rag:8001
       DOCUMENT_STORE_DIR: /var/lib/frangizer
-      DEMO_PASSWORD: ${DEMO_PASSWORD}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?.env에 DEMO_PASSWORD 값을 넣으세요}
       # Same origin through nginx, so no CORS origins are needed in the deployed stack
       CORS_ALLOWED_ORIGINS: ""
     volumes:
@@ -58,33 +56,49 @@ services:
     restart: unless-stopped
 
   rag:
-    # Not in the default stack until rag/ has a server and Dockerfile. Without it /rag-query returns an error.
-    profiles: ["rag"]
     build:
       context: ./rag
     environment:
-      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
-      JWT_SECRET: ${JWT_SECRET}
+      # Names follow rag/.env.example
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?.env에 INTERNAL_TOKEN 값을 넣으세요}
+      JWT_SECRET: ${JWT_SECRET:?.env에 JWT_SECRET (32바이트 이상) 값을 넣으세요}
       JWT_ISSUER: ${JWT_ISSUER:-frangizer}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-frangizer-api}
-      LLM_API_KEY: ${LLM_API_KEY}
-      LLM_MODEL: ${LLM_MODEL}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
-      FAISS_DIR: /var/lib/frangizer/faiss
+      JWT_ALGORITHM: HS256
+      # Without these the service still starts: questions return 503 and indexing fails with EMBEDDING_NOT_CONFIGURED
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
       DOCUMENT_STORE_DIR: /var/lib/frangizer
+      FAISS_DIR: /var/lib/frangizer/faiss
+      RAG_STATE_DB: /var/lib/frangizer/rag/query-results.sqlite3
+      RECIPE_STRUCTURED_FILE: /app/data/structured/demo_cafe_recipes.json
     volumes:
-      - frangizer_data:/var/lib/frangizer   # shared with backend: documents + FAISS indexes
-      # Only data/source is indexable. Never mount data/staged, eval or docs (folder rule 4.3).
-      - ./data/source:/app/data/source:ro
-    depends_on:
-      db:
-        condition: service_healthy
+      - frangizer_data:/var/lib/frangizer   # shared with backend: documents, FAISS revisions, query results
+      # Documents reach RAG only through backend upload → approve. Raw data/source, data/staged,
+      # eval and docs are never mounted (folder rule 4.3). Structured recipes are read-only input.
+      - ./data/structured:/app/data/structured:ro
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
-      interval: 30s
+      # /health needs the service token and returns 503 until models and a first index exist.
+      # The container counts as healthy once the server answers 200 or 503.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import os, urllib.error, urllib.request
+          req = urllib.request.Request("http://localhost:8001/health", headers={"X-Internal-Token": os.environ["INTERNAL_TOKEN"]})
+          try:
+              urllib.request.urlopen(req, timeout=3)
+          except urllib.error.HTTPError as e:
+              raise SystemExit(0 if e.code == 503 else 1)
+      interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 40s
+      retries: 10
+      start_period: 30s
     restart: unless-stopped
 
   voice:
@@ -93,7 +107,7 @@ services:
       context: ./voice
     environment:
       WHISPER_MODEL: ${WHISPER_MODEL:-small}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?.env에 JWT_SECRET (32바이트 이상) 값을 넣으세요}
       JWT_ISSUER: ${JWT_ISSUER:-frangizer}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-frangizer-api}
     volumes:
@@ -108,6 +122,8 @@ services:
       - "${WEB_PORT:-80}:80"
     depends_on:
       backend:
+        condition: service_healthy
+      rag:
         condition: service_healthy
     restart: unless-stopped
 
