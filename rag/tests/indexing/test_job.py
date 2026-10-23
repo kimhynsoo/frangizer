@@ -158,3 +158,28 @@ def test_future_article_versions_get_separate_periods(make_request, roots, embed
     assert current[0]["effective_until"] == future[0]["effective_from"] == "2026-12-31T00:00:00+09:00"
     assert current[0]["effective_from"] == "2026-10-08T00:00:00+09:00"
     assert len({c["chunk_id"] for c in chunks}) == len(chunks)
+
+
+def test_restart_marks_running_jobs_interrupted(make_request, roots, embedder, contract):
+    from app.indexing.job import JobStore
+    store = JobStore(roots[1])
+    done = run(make_request(), roots, embedder)
+    stuck = dict(done, job_id="job-stuck", status="running", index_revision=None, chunk_count=0)
+    store.put("job-stuck", {"request_hash": "x", "job": stuck})
+    tmp = roots[1] / "revisions" / ".tmp-idx-left-over"
+    tmp.mkdir()
+    assert store.recover_interrupted() == ["job-stuck"]
+    job = store.get("job-stuck")["job"]
+    contract("IndexJob", job)
+    assert (job["status"], job["error_code"]) == ("failed", "INTERRUPTED")
+    assert store.get(done["job_id"])["job"] == done  # 끝난 작업은 그대로
+    assert not tmp.exists()
+
+
+def test_chunk_id_never_exceeds_contract_limit():
+    from app.indexing.job import chunk_id
+    rev = "idx-" + "a" * 20
+    long_a, long_b = "p1." + "x" * 120, "p1." + "x" * 119 + "y"
+    a, b = chunk_id(rev, long_a), chunk_id(rev, long_b)
+    assert len(a) <= 100 and len(b) <= 100 and a != b
+    assert chunk_id(rev, "art-17") == "chk-aaaaaaaaaaaa-art-17"
