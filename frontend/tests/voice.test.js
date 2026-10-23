@@ -50,10 +50,13 @@ it("브라우저 인식은 실제 결과만 반환하고 취소 시 엔진을 �
     }
   }
   vi.stubGlobal("SpeechRecognition", Recognition);
-  const promise = browserListen();
+  const partial = vi.fn();
+  const promise = browserListen({ onPartial: partial });
+  expect(instance.interimResults).toBe(true);
   instance.onresult({
     results: [[{ transcript: "바닐라라테 시럽 몇 펌프야" }]],
   });
+  expect(partial).toHaveBeenCalledWith("바닐라라테 시럽 몇 펌프야");
   instance.onend();
   expect(await promise).toBe("바닐라라테 시럽 몇 펌프야");
   const controller = new AbortController(),
