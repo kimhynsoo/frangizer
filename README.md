@@ -198,7 +198,7 @@ frangizer/
 
 ## 실행 방법
 
-> 서비스 코드(`backend/`, `rag/`, `frontend/`)가 모두 올라온 뒤 아래 순서로 실행합니다. 구현이 진행되면 이 절을 갱신합니다.
+> 현재 `backend/`와 `frontend/`는 Docker로 실행할 수 있고, `rag/` 서버는 구현 중입니다. 구현이 진행되면 이 절을 갱신합니다.
 
 **준비물:** Docker Desktop(Compose v2), `.env`에 넣을 값(JWT 서명키, 내부 토큰, LLM API 키, DB 비밀번호, 시연 계정 비밀번호)
 
@@ -226,25 +226,45 @@ cp .env.example .env
 
 ### 2. 기동
 
+기본 구성은 **db + backend + web**입니다. RAG 서버가 아직 없어도 로그인과 화면, 문서·공지·집계 API를 확인할 수 있습니다.
+
 ```bash
 docker compose up -d --build
 ```
 
-기동 순서는 `db → backend·rag → web`입니다. 서비스마다 헬스체크가 있어 앞 서비스가 준비된 뒤에 다음 서비스가 시작됩니다. 처음 빌드는 몇 분 걸릴 수 있습니다.
+기동 순서는 `db → backend → web`입니다. 서비스마다 헬스체크가 있어 앞 서비스가 준비된 뒤에 다음 서비스가 시작됩니다. 처음 빌드는 Gradle·npm 의존성을 받느라 몇 분 걸립니다.
 
-음성 서비스(STT)도 함께 띄우려면 `voice` 프로필을 추가합니다. 첫 음성 요청 때 Whisper 모델을 내려받습니다.
+| 프로필 | 추가되는 서비스 | 명령 |
+| --- | --- | --- |
+| (기본) | db, backend, web | `docker compose up -d --build` |
+| `rag` | + rag (`rag/Dockerfile` 필요) | `docker compose --profile rag up -d --build` |
+| `voice` | + voice (STT, 선택) | `docker compose --profile voice up -d --build` |
+
+RAG 없이 띄우면 질문(`/rag-query`)은 `503`으로 응답합니다. 음성 서비스는 첫 요청 때 Whisper 모델을 내려받습니다.
+
+상태 확인:
 
 ```bash
-docker compose --profile voice up -d --build
+docker compose ps
+```
+
+세 서비스가 `running`이고 db·backend가 `(healthy)`이면 준비된 것입니다. 실패하면 로그를 봅니다.
+
+```bash
+docker compose logs -f backend
 ```
 
 ### 3. 동작 확인
 
+브라우저에서 http://localhost 에 접속해 시연 계정(예: `demo-owner-a001`)과 `DEMO_PASSWORD`로 로그인합니다.
+
+스크립트로 확인할 때는 다음을 실행합니다. 비밀번호는 `.env`의 `DEMO_PASSWORD`를 자동으로 읽습니다.
+
 ```bash
-./scripts/smoke.sh http://localhost
+SKIP_RAG=1 ./scripts/smoke.sh http://localhost
 ```
 
-웹·API 상태, 토큰 없는 접근 거부(401), 로그인, `/me`, `/rag-query`를 순서대로 점검합니다. 로그인 계정과 비밀번호는 인자로 넘깁니다(`./scripts/smoke.sh <주소> <아이디> <DEMO_PASSWORD 값>`).
+웹·API 상태, 토큰 없는 접근 거부(401), 로그인, `/me`를 점검하고, RAG까지 띄운 경우에는 `SKIP_RAG=1` 없이 실행해 `/rag-query`도 확인합니다. 계정을 바꾸려면 `./scripts/smoke.sh <주소> <아이디> <비밀번호>`로 넘깁니다.
 
 | 서비스 | 주소 | 외부 공개 |
 | --- | --- | --- |
@@ -281,7 +301,8 @@ docker compose down -v     # 컨테이너와 볼륨(DB, FAISS 인덱스, 업로�
 - 업로드 문서와 FAISS 인덱스는 `frangizer_data` 볼륨(`/var/lib/frangizer`)에 저장되며, backend가 저장한 문서를 rag가 같은 볼륨에서 읽어 색인합니다. 저장소에는 커밋하지 않습니다.
 - 웹 이미지는 실제 API에 연결되도록 `VITE_USE_MOCK=false`로 빌드됩니다. 프론트를 샘플 데이터로만 보려면 `frontend/`에서 개발 서버를 따로 실행합니다.
 - Docker로 띄운 backend에는 아직 Swagger 스펙(`docs/api`)이 포함되지 않습니다(빌드 범위 조정 예정).
-- 서비스 코드가 없는 상태에서는 `docker compose up`이 실패합니다. 서비스별 `Dockerfile`은 각 담당자 폴더(`backend/`, `rag/`, `voice/`)에 있어야 합니다.
+- `rag`·`voice` 프로필은 해당 폴더에 `Dockerfile`이 생긴 뒤에 사용할 수 있습니다.
+- 80번 포트가 이미 쓰이고 있으면 `.env`의 `WEB_PORT`를 바꿉니다(예: `WEB_PORT=8088` → http://localhost:8088).
 
 ## 평가 계획
 
