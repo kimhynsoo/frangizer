@@ -16,6 +16,7 @@ const auth = useAuth(),
   registrationNotice = ref(""),
   meta = ref(null),
   unread = ref(false),
+  incompleteOnly = ref(false),
   busy = ref(false),
   error = ref(null),
   source = ref(null),
@@ -37,6 +38,7 @@ async function registered() {
   showRegistration.value = false;
   registrationNotice.value = "판본 배포와 공지 등록이 완료됐습니다.";
   unread.value = false;
+  incompleteOnly.value = false;
   await load(1);
   try {
     await noticeStore.refresh();
@@ -49,18 +51,27 @@ async function load(page = 1) {
   busy.value = true;
   error.value = null;
   try {
-    const r = await api.list({
-      page,
-      page_size: 10,
-      ...(unread.value ? { unread: true } : {}),
-    });
+    const r =
+      auth.user.role === "hq" && incompleteOnly.value
+        ? await api.listOutstanding({ page, page_size: 10 })
+        : await api.list({
+            page,
+            page_size: 10,
+            ...(auth.user.role === "owner" && unread.value
+              ? { unread: true }
+              : {}),
+          });
     if (current === generation) {
       rows.value = r.data;
       meta.value = r.meta;
     }
   } catch (e) {
-    error.value = e;
-    retry.value = () => load(page);
+    if (current === generation) {
+      rows.value = [];
+      meta.value = null;
+      error.value = e;
+      retry.value = () => load(page);
+    }
   } finally {
     if (current === generation) busy.value = false;
   }
@@ -186,9 +197,23 @@ onMounted(async () => {
       <h2>
         변경 공지 <span class="muted">{{ meta?.total || 0 }}</span>
       </h2>
-      <label class="checkbox-label"
-        ><input v-model="unread" type="checkbox" @change="load()" />미확인만
-        보기</label
+      <label
+        v-if="auth.user.role === 'hq' && auth.can('analytics:read')"
+        class="checkbox-label"
+        ><input
+          v-model="incompleteOnly"
+          type="checkbox"
+          :disabled="busy"
+          @change="load()"
+        />미확인 점포가 있는 공지만 보기</label
+      >
+      <label v-else-if="auth.user.role === 'owner'" class="checkbox-label"
+        ><input
+          v-model="unread"
+          type="checkbox"
+          :disabled="busy"
+          @change="load()"
+        />미확인만 보기</label
       >
     </div>
     <p v-if="busy" role="status" class="loading-line">공지를 불러오는 중…</p>
@@ -255,12 +280,24 @@ onMounted(async () => {
         </button>
       </div>
     </article>
-    <div v-if="!busy && !rows.length" class="empty-card">
+    <div v-if="!busy && !error && !rows.length" class="empty-card">
       <Bell :size="30" />
       <h2>
-        {{ unread ? "모든 공지를 확인했어요." : "등록된 공지가 없습니다." }}
+        {{
+          incompleteOnly
+            ? "미확인 점포가 있는 공지가 없습니다."
+            : unread
+              ? "모든 공지를 확인했어요."
+              : "등록된 공지가 없습니다."
+        }}
       </h2>
-      <p>새로운 변경사항이 생기면 이곳에서 확인할 수 있어요.</p>
+      <p>
+        {{
+          incompleteOnly
+            ? "전체 공지를 보려면 체크를 해제하세요."
+            : "새로운 변경사항이 생기면 이곳에서 확인할 수 있어요."
+        }}
+      </p>
     </div>
     <PageNav :meta="meta" :busy="busy" @change="load" />
     <p class="composer-note">
