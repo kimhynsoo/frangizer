@@ -34,7 +34,7 @@ async function read() {
   );
   if (!ok)
     notice.value =
-      "기기에 설치된 한국어 읽기 음성이 없습니다. 화면의 답변을 확인해 주세요.";
+      "기기에 설치된 한국어 읽기 음성이 없습니다. 화면의 답변을 확인해 주세요";
   reading.value = false;
 }
 onUnmounted(() => speech?.abort());

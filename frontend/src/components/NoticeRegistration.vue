@@ -145,8 +145,8 @@ onUnmounted(() => {
       </div>
       <div class="notice-registration-body">
         <p class="info-banner">
-          승인·검색 준비가 완료된 판본을 선택하세요. 공지를 등록하면 해당 판본이
-          배포되고 대상 점포에 변경 공지가 생성됩니다.
+          승인·검색 준비가 완료된 판본을 선택하세요<br />공지를 등록하면 해당
+          판본이 배포되고 대상 점포에 변경 공지가 생성됩니다.
         </p>
         <ErrorNotice :error="error" @retry="retry?.()" />
         <p v-if="loading" class="loading-line" role="status">
@@ -192,7 +192,7 @@ onUnmounted(() => {
               class="muted"
             >
               배포 가능한 판본이 없습니다. 문서 관리에서 검수·승인과 검색 준비를
-              완료하세요.
+              완료하세요
             </p>
             <label
               >공지 제목<input

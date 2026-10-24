@@ -3,6 +3,7 @@ import { createPinia } from "pinia";
 import App from "./App.vue";
 import router from "./router";
 import "./assets/main.css";
+import "./assets/cafe-theme.css";
 import focusTrap from "./directives/focus-trap";
 createApp(App)
   .use(createPinia())

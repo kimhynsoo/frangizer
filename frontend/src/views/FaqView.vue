@@ -21,7 +21,7 @@ const groups = computed(() => {
       <div>
         <span class="eyebrow">FAQ</span>
         <h1>자주 묻는 질문</h1>
-        <p>가맹을 준비하며 궁금한 내용을 찾아보세요.</p>
+        <p>가맹을 준비하며 궁금한 내용을 찾아보세요</p>
       </div>
     </div>
     <label class="faq-search"
@@ -55,7 +55,7 @@ const groups = computed(() => {
       </details>
     </section>
     <p v-if="!groups.length" class="empty-state" role="status">
-      검색 결과가 없습니다. 다른 단어로 찾아보세요.
+      검색 결과가 없습니다. 다른 단어로 찾아보세요
     </p>
   </section>
 </template>

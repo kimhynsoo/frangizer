@@ -89,7 +89,7 @@ async function load(page = 1, apply = true) {
     filters.value.week_start &&
     new Date(`${filters.value.week_start}T00:00:00+09:00`).getUTCDay() !== 0
   ) {
-    error.value = { message: "주 시작일은 월요일로 선택해 주세요." };
+    error.value = { message: "주 시작일은 월요일로 선택해 주세요" };
     return;
   }
   // KST Monday midnight is UTC Sunday. API keeps all calendar boundaries in KST.
@@ -179,7 +179,7 @@ onMounted(async () => {
       <div>
         <span class="eyebrow">HEADQUARTERS OVERVIEW</span>
         <h1>질문을 모으면, 개선이 보입니다.</h1>
-        <p>매장에서 자주 묻는 내용과 추가 확인이 필요한 문의를 살펴보세요.</p>
+        <p>매장에서 자주 묻는 내용과 추가 확인이 필요한 문의를 살펴보세요</p>
       </div>
       <button
         class="button secondary small"
@@ -278,7 +278,10 @@ onMounted(async () => {
           ><strong>{{ percent(data.metrics.guidance_rate) }}</strong>
           <p>{{ data.metrics.answered_count }}건 근거 답변 · 정상 응답 기준</p>
         </article>
-        <article class="metric-card warm">
+        <article
+          class="metric-card"
+          :class="{ warm: data.metrics.review_required_count > 0 }"
+        >
           <span><CircleHelp :size="17" />추가 검토 필요</span
           ><strong
             >{{ data.metrics.review_required_count }}<small>건</small></strong
@@ -337,26 +340,30 @@ onMounted(async () => {
             <h2>자주 묻는 주제</h2>
             <span class="muted">문의 건수</span>
           </div>
-          <article
-            v-for="(topic, i) in data.top_topics"
-            :key="topic.topic_id"
-            class="topic-row"
-          >
-            <span class="topic-rank">{{ String(i + 1).padStart(2, "0") }}</span>
-            <div>
-              <strong>{{ topic.label }}</strong>
-              <div class="bar-track">
-                <span
-                  :style="{
-                    width: `${(topic.count / (data.top_topics[0]?.count || 1)) * 100}%`,
-                  }"
-                ></span>
+          <div class="dashboard-card-body">
+            <article
+              v-for="(topic, i) in data.top_topics"
+              :key="topic.topic_id"
+              class="topic-row"
+            >
+              <span class="topic-rank">{{
+                String(i + 1).padStart(2, "0")
+              }}</span>
+              <div>
+                <strong>{{ topic.label }}</strong>
+                <div class="bar-track">
+                  <span
+                    :style="{
+                      width: `${(topic.count / (data.top_topics[0]?.count || 1)) * 100}%`,
+                    }"
+                  ></span>
+                </div>
               </div>
+              <strong>{{ topic.count }}<small>건</small></strong>
+            </article>
+            <div v-if="!data.top_topics.length" class="empty-state">
+              이 기간에는 집계할 주제가 없습니다.
             </div>
-            <strong>{{ topic.count }}<small>건</small></strong>
-          </article>
-          <div v-if="!data.top_topics.length" class="empty-state">
-            이 기간에는 집계할 주제가 없습니다.
           </div>
           <p class="surface-footnote">
             질문 빈도는 문서·교육 개선을 위한 참고 지표입니다.
@@ -367,19 +374,21 @@ onMounted(async () => {
             <h2>지역별 문의</h2>
             <span class="muted">점포 운영 현황</span>
           </div>
-          <div
-            v-for="region in data.by_region"
-            :key="region.region_code"
-            class="region-row"
-          >
-            <div>
-              <strong>{{ region.region_name }}</strong
-              ><span v-if="region.small_sample" class="badge">표본 적음</span>
+          <div class="dashboard-card-body">
+            <div
+              v-for="region in data.by_region"
+              :key="region.region_code"
+              class="region-row"
+            >
+              <div>
+                <strong>{{ region.region_name }}</strong
+                ><span v-if="region.small_sample" class="badge">표본 적음</span>
+              </div>
+              <strong>{{ region.metrics.total }}<small>건</small></strong>
             </div>
-            <strong>{{ region.metrics.total }}<small>건</small></strong>
-          </div>
-          <div v-if="!data.by_region.length" class="empty-state">
-            표시할 지역 집계가 없습니다.
+            <div v-if="!data.by_region.length" class="empty-state">
+              표시할 지역 집계가 없습니다.
+            </div>
           </div>
           <p class="surface-footnote">
             접수 당시의 점포 지역을 기준으로 집계합니다.
@@ -456,8 +465,12 @@ onMounted(async () => {
                 </td>
                 <td>{{ row.store_name || "예비 점주" }}</td>
                 <td>{{ categories[row.category] }}</td>
-                <td><StatusBadge :status="row.answer_status" /></td>
-                <td><StatusBadge :status="row.resolution_status" /></td>
+                <td>
+                  <StatusBadge :status="row.answer_status" />
+                </td>
+                <td>
+                  <StatusBadge :status="row.resolution_status" />
+                </td>
                 <td>
                   <button
                     class="icon-button"
@@ -529,7 +542,7 @@ onMounted(async () => {
           <p>
             {{
               selected.answer_status === "processing"
-                ? "아직 답변을 처리하고 있습니다. 잠시 후 최신 문의를 다시 불러오세요."
+                ? "아직 답변을 처리하고 있습니다. 잠시 후 최신 문의를 다시 불러오세요"
                 : "시스템 오류로 답변 결과가 없습니다. 근거 부족으로 처리된 것이 아닙니다."
             }}
           </p>

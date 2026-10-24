@@ -31,14 +31,10 @@ const exampleQuestions =
 function selectExample(text) {
   if (busy.value || loading.value || voiceActive.value) return;
   question.value = text;
-  saveDraft();
-  nextTick(() =>
-    document.getElementById(`question-input-${props.tabId}`)?.focus(),
-  );
+  send();
 }
 const draftKey = `frangizer.question-draft.${userId}.${props.tabId}`;
 const question = ref(sessionStorage.getItem(draftKey) || ""),
-  asOf = ref(""),
   busy = ref(false),
   loading = ref(false),
   error = ref(null),
@@ -69,7 +65,6 @@ async function send(retry = false, { readAnswer = false } = {}) {
       body: {
         question: text,
         conversation_id: conversationId.value,
-        ...(asOf.value ? { as_of: new Date(asOf.value).toISOString() } : {}),
       },
       readAnswer,
     };
@@ -141,10 +136,10 @@ async function startReading(result) {
     );
     if (!ok && !disposed && !speech.signal.aborted)
       speechNotice.value =
-        "기기에 설치된 한국어 음성이 없어 답변을 읽지 못했습니다. 화면에서 답변을 확인해 주세요.";
+        "기기에 설치된 한국어 음성이 없어 답변을 읽지 못했습니다. 화면에서 답변을 확인해 주세요";
   } catch {
     if (!disposed && !speech.signal.aborted)
-      speechNotice.value = "답변을 읽지 못했습니다. 다시 시도해 주세요.";
+      speechNotice.value = "답변을 읽지 못했습니다. 다시 시도해 주세요";
   } finally {
     if (answerSpeech === speech) {
       readingAnswer.value = false;
@@ -303,7 +298,7 @@ onUnmounted(() => {
           </template>
           <div v-else class="history-state">
             <p v-if="message.status === 'processing'">
-              이 질문은 처리 중입니다. 잠시 후 대화 상태를 새로 확인해 주세요.
+              이 질문은 처리 중입니다. 잠시 후 대화 상태를 새로 확인해 주세요
             </p>
             <template v-else
               ><p>
@@ -346,7 +341,6 @@ onUnmounted(() => {
       <VoiceInput
         :input-id="`question-input-${tabId}`"
         v-model="question"
-        v-model:as-of="asOf"
         :disabled="busy || loading"
         :allow-read-aloud="auth.user.role !== 'prospect'"
         :reading-answer="readingAnswer"
@@ -357,8 +351,8 @@ onUnmounted(() => {
         @update:model-value="saveDraft"
       />
       <p class="composer-note">
-        개인정보 입력을 피해주세요. 답변의 출처와 적용일을 확인하고, 필요한
-        결정은 담당자와 확정하세요.
+        개인정보 입력을 피하고, 답변의 출처와 적용일을 확인한 뒤 필요한 결정은
+        담당자와 확정하세요
       </p>
     </div>
   </section>

@@ -58,7 +58,7 @@ export function browserListen({
     if (!Recognition) {
       reject(
         new Error(
-          "이 브라우저는 실시간 음성 입력을 지원하지 않습니다. Chrome·Edge 등 지원 브라우저를 사용하거나 실제 STT 서버에 연결해 주세요.",
+          "이 브라우저는 실시간 음성 입력을 지원하지 않습니다. Chrome·Edge 등 지원 브라우저를 사용하거나 실제 STT 서버에 연결해 주세요",
         ),
       );
       return;
@@ -91,7 +91,7 @@ export function browserListen({
       else
         reject(
           new Error(
-            "말소리를 인식하지 못했습니다. 마이크 가까이에서 다시 말해 주세요.",
+            "말소리를 인식하지 못했습니다. 마이크 가까이에서 다시 말해 주세요",
           ),
         );
     };
@@ -115,14 +115,14 @@ export function browserListen({
         new Error(
           {
             "not-allowed":
-              "마이크 권한이 필요합니다. 브라우저의 마이크 접근을 허용해 주세요.",
+              "마이크 권한이 필요합니다. 브라우저의 마이크 접근을 허용해 주세요",
             "audio-capture":
-              "마이크를 찾을 수 없습니다. 장치 연결을 확인해 주세요.",
+              "마이크를 찾을 수 없습니다. 장치 연결을 확인해 주세요",
             network:
-              "브라우저 음성 인식에 연결하지 못했습니다. 인터넷 연결을 확인하거나 서버 모드를 사용해 주세요.",
-            "no-speech": "말소리가 들리지 않았습니다. 다시 말해 주세요.",
+              "브라우저 음성 인식에 연결하지 못했습니다. 인터넷 연결을 확인하거나 서버 모드를 사용해 주세요",
+            "no-speech": "말소리가 들리지 않았습니다. 다시 말해 주세요",
             aborted: "음성 입력이 중단됐습니다.",
-          }[event.error] || "음성 인식에 실패했습니다. 다시 시도해 주세요.",
+          }[event.error] || "음성 인식에 실패했습니다. 다시 시도해 주세요",
         ),
       );
     recognition.onend = () => finish();
@@ -141,7 +141,7 @@ export function browserListen({
             recognition.abort();
           } finally {
             finish(
-              new Error("음성 인식 시간이 초과됐습니다. 다시 말해 주세요."),
+              new Error("음성 인식 시간이 초과됐습니다. 다시 말해 주세요"),
             );
           }
         },
@@ -176,8 +176,8 @@ export async function recordAudio({
   } catch (error) {
     throw new Error(
       error.name === "NotAllowedError"
-        ? "마이크 접근이 차단됐습니다. 브라우저 권한을 확인해 주세요."
-        : "마이크를 사용할 수 없습니다. 장치를 확인해 주세요.",
+        ? "마이크 접근이 차단됐습니다. 브라우저 권한을 확인해 주세요"
+        : "마이크를 사용할 수 없습니다. 장치를 확인해 주세요",
     );
   }
   if (signal?.aborted) {
@@ -232,12 +232,12 @@ export async function recordAudio({
       else if (!speech)
         reject(
           new Error(
-            "말소리를 확인하지 못했습니다. 소음이 적은 방향으로 마이크를 가까이하고 다시 말해 주세요.",
+            "말소리를 확인하지 못했습니다. 소음이 적은 방향으로 마이크를 가까이하고 다시 말해 주세요",
           ),
         );
       else if (!blob?.size) reject(new Error("녹음된 음성이 없습니다."));
       else if (blob.size > 10 * 1024 * 1024)
-        reject(new Error("음성이 10MB를 초과했습니다. 짧게 다시 말해 주세요."));
+        reject(new Error("음성이 10MB를 초과했습니다. 짧게 다시 말해 주세요"));
       else resolve(blob);
     };
     const stop = () => {

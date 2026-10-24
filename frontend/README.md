@@ -47,6 +47,26 @@ docker compose up -d --no-deps web
 
 이 명령은 DB·백엔드·RAG가 이미 실행 중인 환경의 웹 갱신용이다. 최초 전체 실행은 루트 README를 따른다.
 
+### 프론트 수정 중 자동 반영 (실제 API 모드)
+
+Docker Desktop을 켜고 저장소 루트에서 실행한다. Docker Compose 2.22 이상이 필요하다.
+
+```sh
+docker compose up -d --build
+docker compose watch --no-up --prune=false web
+```
+
+Watch 터미널을 켜둔 채 `http://localhost`(WEB_PORT를 바꿨으면 해당 포트)에서 확인한다.
+`frontend/` 또는 `nginx/` 파일을 저장하거나 `git pull`로 갱신하면 웹 이미지가 자동으로
+재빌드·재시작된다. 빌드 완료 후 브라우저를 새로고침한다. API·DB·RAG는 같은 Compose
+서비스에 연결되며 샘플 모드로 전환하지 않는다. Watch 종료는 해당 터미널에서 Ctrl+C이며
+서비스는 계속 실행된다. 테스트·빌드 산출물·환경 파일은 감시에서 제외한다.
+
+팀원은 PR 병합 후 최신 main을 받거나, 병합 전 검토할 PR 브랜치를 받은 뒤 위 명령을 실행한다.
+PR 생성만으로 팀원 PC의 코드는 갱신되지 않는다. 이미 Watch 중이면 프론트 변경은 pull 후
+자동 재빌드되지만, 백엔드·RAG·Compose 설정도 변경됐으면 전체 `up -d --build`를 다시 실행한다.
+`.env`와 DB·문서 색인 데이터는 PC별로 별도 준비한다.
+
 ### 모드·계정 확인
 
 - `npm run dev`의 기본은 샘플 모드이며, Docker 웹의 기본 빌드는 실제 API 모드다. UI 코드가 같아도 문서·공지·답변 데이터는 다를 수 있다.

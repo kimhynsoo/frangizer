@@ -62,8 +62,8 @@ export function indexJobFailure(job) {
     jobId: job.job_id,
     nextAction:
       job.error_code === "CHECKSUM_MISMATCH"
-        ? "등록한 원본 파일과 체크섬을 확인하도록 데이터·API 담당자에게 작업 ID를 전달해 주세요."
-        : "문서·판본과 작업 ID, 오류 코드를 데이터·API 담당자에게 전달해 원인을 확인해 주세요. 자동으로 다시 승인하거나 배포하지 않습니다.",
+        ? "등록한 원본 파일과 체크섬을 확인하도록 데이터·API 담당자에게 작업 ID를 전달해 주세요"
+        : "자동으로 다시 승인하거나 배포하지 않습니다. 문서·판본과 작업 ID, 오류 코드를 데이터·API 담당자에게 전달해 원인을 확인해 주세요",
     retryable: false,
   };
 }
