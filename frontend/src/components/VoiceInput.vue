@@ -18,12 +18,10 @@ const props = defineProps({
   readingAnswer: Boolean,
   allowReadAloud: { type: Boolean, default: true },
   modelValue: { type: String, default: "" },
-  asOf: { type: String, default: "" },
 });
 const emit = defineEmits([
   "confirmed",
   "update:modelValue",
-  "update:asOf",
   "active",
   "readPreference",
   "stopReading",
@@ -42,11 +40,11 @@ const active = computed(() => !["idle", "error"].includes(phase.value));
 const phaseText = computed(
   () =>
     ({
-      idle: "제조 중에도 말로 레시피를 물어보세요.",
-      permission: "마이크 연결을 기다리고 있어요.",
-      listening: "메뉴명과 궁금한 양·순서를 말해 주세요.",
-      transcribing: "말씀하신 내용을 글로 바꾸고 있어요.",
-      error: "음성 입력을 다시 시작할 수 있어요.",
+      idle: "제조 중에도 말로 레시피를 물어보세요",
+      permission: "마이크 연결을 기다리고 있어요",
+      listening: "메뉴명과 궁금한 양·순서를 말해 주세요",
+      transcribing: "말씀하신 내용을 글로 바꾸고 있어요",
+      error: "음성 입력을 다시 시작할 수 있어요",
     })[phase.value],
 );
 let controller = null,
@@ -120,11 +118,13 @@ async function start() {
     const text = (await listen(signal, session)).trim();
     if (signal.aborted || session !== run) return;
     if (!text || text.length > 2000)
-      throw new Error("질문을 짧게 다시 말해 주세요. 최대 2,000자입니다.");
+      throw new Error(
+        "질문은 최대 2,000자까지 입력할 수 있습니다. 짧게 다시 말해 주세요",
+      );
     transcript.value = [prefix, text].filter(Boolean).join(" ");
     if (transcript.value.length > 2000) {
       transcript.value = prefix;
-      throw new Error("질문은 최대 2,000자입니다. 입력 내용을 줄여 주세요.");
+      throw new Error("질문은 최대 2,000자입니다. 입력 내용을 줄여 주세요");
     }
     phase.value = "idle";
     document.getElementById(props.inputId)?.focus();
@@ -198,7 +198,7 @@ onUnmounted(() => {
       :id="inputId"
       v-model="transcript"
       maxlength="2000"
-      placeholder="질문을 입력하거나 마이크를 눌러 말해 주세요."
+      placeholder="질문을 입력하거나 마이크를 눌러 말해 주세요"
       :disabled="disabled || active"
       @input="example = false"
       @keydown.enter.exact="onEnter"
@@ -235,14 +235,6 @@ onUnmounted(() => {
     <div class="composer-footer">
       <div class="composer-options">
         <span><BookOpen :size="14" />문서 기반 답변</span>
-        <label class="date-option"
-          >기준 시점<input
-            :value="asOf"
-            type="datetime-local"
-            aria-label="답변 기준 시점"
-            :disabled="disabled || active"
-            @input="$emit('update:asOf', $event.target.value)"
-        /></label>
       </div>
       <div class="composer-controls">
         <button
@@ -308,11 +300,11 @@ onUnmounted(() => {
       </p>
       <p v-else-if="isMock" class="voice-engine-note">
         샘플 모드에서는 STT 서버에 연결하지 않습니다. 실제 서버 모드로
-        전환하거나 실시간 음성 입력을 선택해 주세요.
+        전환하거나 실시간 음성 입력을 선택해 주세요
       </p>
       <p v-else class="voice-engine-note">
         녹음이 끝나면 인식 결과가 질문창에 입력됩니다. 실시간 입력은 한국어 음성
-        인식을 지원하는 브라우저에서 이용하세요.
+        인식을 지원하는 브라우저에서 이용하세요
       </p>
       <button
         v-if="isMock"
@@ -325,7 +317,8 @@ onUnmounted(() => {
       </button>
       <p class="voice-engine-note composer-voice-hint">
         말한 내용은 질문창에 입력됩니다. 필요하면 수정한 뒤 엔터나 보내기
-        버튼으로 질문하세요. 최대 60초이며 취소·화면 이탈 시 마이크가 꺼집니다.
+        버튼으로 질문할 수 있습니다. 최대 60초이며 취소·화면 이탈 시 마이크가
+        꺼집니다.
       </p>
     </details>
   </form>

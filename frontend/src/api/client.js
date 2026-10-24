@@ -1,10 +1,8 @@
 import axios from "axios";
 
-export const isMock = import.meta.env.VITE_USE_MOCK !== "false";
+export const isMock = import.meta.env.VITE_USE_MOCK === "true";
 const configuredBase = import.meta.env.VITE_API_BASE_URL?.trim();
-export const baseURL =
-  configuredBase ||
-  (import.meta.env.DEV ? "http://localhost:8080/api/v1" : "/api/v1");
+export const baseURL = configuredBase || "/api/v1";
 const tokenKey = `frangizer.${isMock ? "demo" : "live"}.token`;
 export const tokenStorage = {
   get: () => sessionStorage.getItem(tokenKey),
@@ -25,8 +23,8 @@ client.interceptors.response.use(
     error.message =
       payload?.error?.message ||
       (error.code === "ECONNABORTED"
-        ? "응답 시간이 초과됐습니다. 잠시 후 다시 시도해 주세요."
-        : "서버에 연결할 수 없습니다. 연결 상태를 확인해 주세요.");
+        ? "응답 시간이 초과됐습니다. 잠시 후 다시 시도해 주세요"
+        : "서버에 연결할 수 없습니다. 연결 상태를 확인해 주세요");
     error.details = payload?.error?.details || [];
     error.requestId = payload?.request_id;
     error.retryable = payload?.error?.retryable ?? !error.response;
@@ -65,7 +63,7 @@ export async function downloadFile(path, name) {
   anchor.href = url;
   anchor.download =
     isMock && result.data.type?.startsWith("text/plain") && /\.pdf$/i.test(name)
-      ? "합성_시연_문서.txt"
+      ? "합성_시연_문서txt"
       : name;
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);

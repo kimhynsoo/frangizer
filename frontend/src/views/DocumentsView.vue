@@ -29,6 +29,8 @@ const auth = useAuth(),
   history = ref([]),
   historyMeta = ref(null),
   historyPage = ref(1),
+  historyBusy = ref(false),
+  historyError = ref(null),
   jobs = ref({}),
   file = ref(null),
   uploadKey = ref(null),
@@ -119,7 +121,8 @@ const categories = {
 };
 const timers = new Set();
 let disposed = false,
-  loadGeneration = 0;
+  loadGeneration = 0,
+  historyGeneration = 0;
 async function load(page = 1) {
   const generation = ++loadGeneration;
   busy.value = true;
@@ -155,17 +158,34 @@ async function load(page = 1) {
     if (generation === loadGeneration) busy.value = false;
   }
 }
+function closeHistory() {
+  if (saving.value) return;
+  historyGeneration++;
+  selected.value = null;
+  history.value = [];
+  historyMeta.value = null;
+  historyBusy.value = false;
+  historyError.value = null;
+}
 async function openHistory(row, page = 1) {
+  if (!row || disposed) return;
+  const generation = ++historyGeneration;
   selected.value = row;
   historyPage.value = page;
-  error.value = null;
+  history.value = [];
+  historyMeta.value = null;
+  historyBusy.value = true;
+  historyError.value = null;
   try {
     const result = await api.versions(row.document_id, { page, page_size: 10 });
+    if (disposed || generation !== historyGeneration) return;
     history.value = result.data;
     historyMeta.value = result.meta;
   } catch (e) {
-    error.value = e;
-    retry.value = () => openHistory(row, page);
+    if (!disposed && generation === historyGeneration) historyError.value = e;
+  } finally {
+    if (!disposed && generation === historyGeneration)
+      historyBusy.value = false;
   }
 }
 function startUpload() {
@@ -196,7 +216,7 @@ async function upload(reuse = false) {
     file.value.size > 10 * 1024 * 1024
   ) {
     error.value = {
-      message: "PDF·TXT·Markdown 파일을 10MB 이하로 선택해 주세요.",
+      message: "PDF·TXT·Markdown 파일을 10MB 이하로 선택해 주세요",
     };
     return;
   }
@@ -238,7 +258,7 @@ async function upload(reuse = false) {
     await api.upload(file.value, metadata, uploadKey.value);
     showUpload.value = false;
     file.value = null;
-    success.value = "문서를 초안으로 등록했습니다. 검수 후 승인해 주세요.";
+    success.value = "문서를 초안으로 등록했습니다. 검수 후 승인해 주세요";
     uploadKey.value = null;
     await load();
   } catch (e) {
@@ -317,6 +337,7 @@ onMounted(() => load());
 onUnmounted(() => {
   disposed = true;
   loadGeneration++;
+  historyGeneration++;
   for (const timer of timers) clearTimeout(timer);
 });
 </script>
@@ -326,15 +347,13 @@ onUnmounted(() => {
       <div>
         <span class="eyebrow">DOCUMENT LIBRARY</span>
         <h1>
-          {{
-            management ? "운영 기준을 관리하는 곳." : "필요한 기준이 모인 곳."
-          }}
+          {{ management ? "운영 기준을 관리하는 곳" : "필요한 기준이 모인 곳" }}
         </h1>
         <p>
           {{
             management
-              ? "문서의 검수부터 배포까지, 판본별로 안전하게 관리하세요."
-              : "접근이 허용된 문서와 적용 기준을 확인하세요."
+              ? "문서의 검수부터 배포까지, 판본별로 안전하게 관리하세요"
+              : "접근이 허용된 문서와 적용 기준을 확인하세요"
           }}
         </p>
       </div>
@@ -346,7 +365,7 @@ onUnmounted(() => {
       <FolderOpen :size="17" /><span>{{
         management
           ? "등록 → 검수·승인 → 검색 준비 → 배포 순서로 진행됩니다."
-          : "문서의 버전과 적용일을 확인하고 사용해 주세요."
+          : "문서의 버전과 적용일을 확인하고 사용해 주세요"
       }}</span>
     </div>
     <p v-if="success" class="success-notice" role="status">{{ success }}</p>
@@ -365,7 +384,7 @@ onUnmounted(() => {
       </div>
       <p v-if="busy" class="loading-line" role="status">문서를 불러오는 중…</p>
       <div class="table-scroll">
-        <table>
+        <table class="document-table">
           <thead>
             <tr>
               <th>문서명</th>
@@ -378,7 +397,7 @@ onUnmounted(() => {
           </thead>
           <tbody>
             <tr v-for="row in rows" :key="row.document_id">
-              <td>
+              <td data-label="문서명">
                 <div class="document-title">
                   <span class="file-icon"><FileText :size="20" /></span>
                   <div>
@@ -396,8 +415,8 @@ onUnmounted(() => {
                   </div>
                 </div>
               </td>
-              <td>v{{ row.selected_version }}</td>
-              <td>
+              <td data-label="버전">v{{ row.selected_version }}</td>
+              <td data-label="적용일">
                 {{
                   row.effective_from
                     ? new Date(row.effective_from).toLocaleDateString("ko-KR", {
@@ -406,13 +425,15 @@ onUnmounted(() => {
                     : "—"
                 }}
               </td>
-              <td>
+              <td data-label="배포 상태">
                 <StatusBadge :status="row.lifecycle" /><StatusBadge
                   :status="application(row)"
                 />
               </td>
-              <td><StatusBadge :status="row.index_status" /></td>
-              <td>
+              <td data-label="검색 준비">
+                <StatusBadge :status="row.index_status" />
+              </td>
+              <td data-label="작업">
                 <button class="button small ghost" @click="openHistory(row)">
                   판본 보기<ArrowUpRight :size="14" />
                 </button>
@@ -424,7 +445,7 @@ onUnmounted(() => {
       <div v-if="!busy && !rows.length" class="empty-state">
         <FolderOpen :size="30" />
         <h3>표시할 문서가 없습니다.</h3>
-        <p>접근 범위와 선택한 분류를 확인해 주세요.</p>
+        <p>접근 범위와 선택한 분류를 확인해 주세요</p>
       </div>
       <PageNav :meta="meta" :busy="busy" @change="load" />
     </div>
@@ -432,84 +453,112 @@ onUnmounted(() => {
       배포 완료와 적용 시작은 다릅니다. 현재 적용 판본은 서버의 현재 시점 검색
       결과를 기준으로 표시합니다.
     </div>
-    <div v-if="selected" class="surface history-surface">
-      <div class="surface-toolbar">
-        <div>
-          <span class="eyebrow">VERSION HISTORY</span>
-          <h2>{{ selected.title }} · 판본 이력</h2>
-        </div>
-        <button
-          class="icon-button"
-          aria-label="판본 이력 닫기"
-          @click="selected = null"
-        >
-          ✕
-        </button>
-      </div>
-      <article
-        v-for="version in history"
-        :key="version.version_id"
-        class="version-row"
+    <div
+      v-if="selected"
+      class="modal-backdrop history-backdrop"
+      @click.self="closeHistory"
+    >
+      <section
+        class="surface history-surface history-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="history-title"
+        v-focus-trap="closeHistory"
       >
-        <div>
-          <strong>v{{ version.version }}</strong
-          ><StatusBadge :status="version.lifecycle" /><StatusBadge
-            :status="version.index_status"
-          />
-          <StatusBadge :status="application(version)" />
-          <p>{{ version.change_summary }}</p>
-          <p v-if="version.material_type === 'official'" class="muted">
-            {{
-              version.indexing_policy.legal_temporal_reviewed
-                ? "법령 시행 시점 검수 기록 있음"
-                : "법령 시행 시점 미검수"
-            }}
-          </p>
-          <small class="muted"
-            >적용
-            {{
-              new Date(version.effective_from).toLocaleString("ko-KR", {
-                timeZone: "Asia/Seoul",
-              })
-            }}</small
-          >
-        </div>
-        <div class="version-actions">
+        <div class="surface-toolbar">
+          <div>
+            <span class="eyebrow">VERSION HISTORY</span>
+            <h2 id="history-title">{{ selected.title }} · 판본 이력</h2>
+          </div>
           <button
-            class="button small secondary"
-            @click="
-              source = {
-                document_id: version.document_id,
-                version_id: version.version_id,
-                title: version.title,
-              }
-            "
-          >
-            원문·출처 확인</button
-          ><button
-            v-if="auth.can('document:approve') && version.lifecycle === 'draft'"
-            class="button small"
+            class="icon-button"
+            aria-label="판본 이력 닫기"
             :disabled="saving"
-            @click="beginAction(version, 'approve')"
+            @click="closeHistory"
           >
-            검수 완료 · 승인</button
-          ><button
-            v-if="
-              auth.can('document:publish') && version.lifecycle === 'approved'
-            "
-            class="button small"
-            :disabled="saving || version.index_status !== 'ready'"
-            @click="beginAction(version, 'publish')"
-          >
-            배포 · 공지 생성
+            ✕
           </button>
         </div>
-      </article>
-      <PageNav
-        :meta="historyMeta"
-        :busy="saving"
-        @change="(page) => openHistory(selected, page)"
-      />
+        <p v-if="historyBusy" class="history-loading" role="status">
+          판본 목록을 불러오는 중…
+        </p>
+        <ErrorNotice
+          :error="historyError"
+          @retry="openHistory(selected, historyPage)"
+        />
+        <p
+          v-if="!historyBusy && !historyError && !history.length"
+          class="empty-state"
+        >
+          등록된 판본이 없습니다.
+        </p>
+        <article
+          v-for="version in history"
+          :key="version.version_id"
+          class="version-row"
+        >
+          <div>
+            <strong>v{{ version.version }}</strong
+            ><StatusBadge :status="version.lifecycle" /><StatusBadge
+              :status="version.index_status"
+            />
+            <StatusBadge :status="application(version)" />
+            <p>{{ version.change_summary }}</p>
+            <p v-if="version.material_type === 'official'" class="muted">
+              {{
+                version.indexing_policy.legal_temporal_reviewed
+                  ? "법령 시행 시점 검수 기록 있음"
+                  : "법령 시행 시점 미검수"
+              }}
+            </p>
+            <small class="muted"
+              >적용
+              {{
+                new Date(version.effective_from).toLocaleString("ko-KR", {
+                  timeZone: "Asia/Seoul",
+                })
+              }}</small
+            >
+          </div>
+          <div class="version-actions">
+            <button
+              class="button small secondary"
+              @click="
+                source = {
+                  document_id: version.document_id,
+                  version_id: version.version_id,
+                  title: version.title,
+                }
+              "
+            >
+              원문·출처 확인</button
+            ><button
+              v-if="
+                auth.can('document:approve') && version.lifecycle === 'draft'
+              "
+              class="button small"
+              :disabled="saving"
+              @click="beginAction(version, 'approve')"
+            >
+              검수 완료 · 승인</button
+            ><button
+              v-if="
+                auth.can('document:publish') && version.lifecycle === 'approved'
+              "
+              class="button small"
+              :disabled="saving || version.index_status !== 'ready'"
+              @click="beginAction(version, 'publish')"
+            >
+              배포 · 공지 생성
+            </button>
+          </div>
+        </article>
+        <PageNav
+          :meta="historyMeta"
+          :busy="saving || historyBusy"
+          @change="(page) => openHistory(selected, page)"
+        />
+      </section>
     </div>
     <div
       v-if="showUpload"
@@ -547,7 +596,7 @@ onUnmounted(() => {
           </button>
           <p class="muted">
             예시를 채운 뒤 data/staged/합성_카페_레시피_v1.1.pdf를 직접
-            선택하세요. 적용일은 2026년 10월 26일이며, 파일을 선택해도
+            선택하세요<br />적용일은 2026년 10월 26일이며, 파일을 선택해도
             승인·배포되지는 않습니다.
           </p>
         </div>
@@ -754,7 +803,7 @@ onUnmounted(() => {
                   required
                   maxlength="2000"
                   rows="4"
-                  placeholder="무엇을 확인했는지 기록하세요."
+                  placeholder="무엇을 확인했는지 기록하세요"
                 ></textarea></label></template
             ><label v-else
               >점포에 표시할 공지 제목<input
