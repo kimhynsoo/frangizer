@@ -16,6 +16,8 @@ import StatusBadge from "../components/StatusBadge.vue";
 import PageNav from "../components/PageNav.vue";
 import AnswerDetails from "../components/AnswerDetails.vue";
 import SourcePanel from "../components/SourcePanel.vue";
+import DateRangePicker from "../components/DateRangePicker.vue";
+import { koreaToday, daysBefore, dateRangeQuery } from "../date-range";
 const auth = useAuth(),
   data = ref(null),
   rows = ref([]),
@@ -33,7 +35,8 @@ const auth = useAuth(),
   edit = ref({}),
   activeQuery = ref({});
 const filters = ref({
-  week_start: "",
+  start_date: daysBefore(koreaToday(), 6),
+  end_date: koreaToday(),
   region_code: "",
   store_id: "",
   category: "",
@@ -84,22 +87,24 @@ async function allOptions(kind) {
   }
 }
 async function load(page = 1, apply = true) {
-  if (
-    apply &&
-    filters.value.week_start &&
-    new Date(`${filters.value.week_start}T00:00:00+09:00`).getUTCDay() !== 0
-  ) {
-    error.value = { message: "주 시작일은 월요일로 선택해 주세요" };
-    return;
+  if (apply) {
+    try {
+      const { start_date, end_date, ...other } = filters.value;
+      const range = dateRangeQuery(start_date, end_date);
+      activeQuery.value = {
+        ...Object.fromEntries(
+          Object.entries(other).filter(([, value]) => value !== ""),
+        ),
+        ...range,
+      };
+    } catch (e) {
+      error.value = { message: e.message };
+      return;
+    }
   }
-  // KST Monday midnight is UTC Sunday. API keeps all calendar boundaries in KST.
   const current = ++generation;
   busy.value = true;
   error.value = null;
-  if (apply)
-    activeQuery.value = Object.fromEntries(
-      Object.entries(filters.value).filter(([, v]) => v !== ""),
-    );
   const query = { ...activeQuery.value },
     {
       answer_status,
@@ -190,12 +195,15 @@ onMounted(async () => {
       </button>
     </div>
     <form class="filter-bar" @submit.prevent="load()">
-      <SlidersHorizontal :size="18" /><label
-        >조회 주<input
-          v-model="filters.week_start"
-          type="date"
-          aria-label="조회 주 월요일" /></label
-      ><label
+      <SlidersHorizontal :size="18" />
+      <div class="date-range-field">
+        <span>조회 기간</span
+        ><DateRangePicker
+          v-model:start="filters.start_date"
+          v-model:end="filters.end_date"
+        />
+      </div>
+      <label
         >지역<select
           v-model="filters.region_code"
           @change="filters.store_id = ''"
@@ -241,7 +249,7 @@ onMounted(async () => {
         ><span
           class="badge"
           :class="data.period.is_partial ? 'needs_review' : ''"
-          >{{ data.period.is_partial ? "진행 중" : "완료 주" }}</span
+          >{{ data.period.is_partial ? "진행 중" : "조회 기간" }}</span
         ><span class="muted"
           >KST ·
           {{ activeQuery.user_role === "prospect" ? "예비 점주" : "운영 점주" }}

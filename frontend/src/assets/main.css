@@ -2565,3 +2565,16 @@ td > .badge + .badge {
 .chat-examples .suggestion-card strong {
   max-width: none;
 }
+
+.filter-bar .date-range-field {
+  flex: 1;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 9px;
+}
+@media (max-width: 620px) {
+  .filter-bar .date-range-field { width: 100%; min-width: 0; flex-basis: 100%; }
+}
