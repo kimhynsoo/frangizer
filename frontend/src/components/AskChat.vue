@@ -3,13 +3,15 @@ import { ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { Sparkles, ThumbsUp, ThumbsDown } from "@lucide/vue";
 import { useAuth } from "../stores/auth";
 import * as api from "../api/rag";
-import { newKey } from "../api/client";
+import { newKey, isMock } from "../api/client";
 import { speakLocally } from "../api/voice";
+import { spokenAnswer } from "../api/spoken-answer";
 import SourcePanel from "./SourcePanel.vue";
 import StatusBadge from "./StatusBadge.vue";
 import ErrorNotice from "./ErrorNotice.vue";
 import AnswerDetails from "./AnswerDetails.vue";
 import VoiceInput from "./VoiceInput.vue";
+import HandsFreeVoice from "./HandsFreeVoice.vue";
 const props = defineProps({
   tabId: String,
   initialConversationId: String,
@@ -46,6 +48,8 @@ const question = ref(sessionStorage.getItem(draftKey) || ""),
   feedbackError = ref(null),
   bottom = ref(null),
   voiceActive = ref(false),
+  handsFreeEnabled = ref(false),
+  handsFreeControl = ref(null),
   speechNotice = ref(""),
   readingAnswer = ref(false),
   readingQuestionId = ref(null);
@@ -102,6 +106,7 @@ async function send(retry = false, { readAnswer = false } = {}) {
       bottom.value?.scrollIntoView({ behavior: "smooth", block: "end" });
     if (props.active && attempt.readAnswer && auth.user.role !== "prospect")
       startReading(result);
+    return result;
   } catch (e) {
     if (disposed) return;
     error.value = e;
@@ -131,7 +136,12 @@ async function startReading(result) {
   readingAnswer.value = true;
   try {
     const ok = await speakLocally(
-      `${result.answer} ${(result.steps || []).join(" ")}`,
+      spokenAnswer(
+        result,
+        messages.value.find(
+          (message) => message.result?.question_id === result.question_id,
+        )?.question || "",
+      ),
       { signal: speech.signal },
     );
     if (!ok && !disposed && !speech.signal.aborted)
@@ -148,6 +158,7 @@ async function startReading(result) {
   }
 }
 function toggleReading(result) {
+  handsFreeControl.value?.stop();
   if (readingAnswer.value && readingQuestionId.value === result.question_id)
     stopReading();
   else startReading(result);
@@ -167,7 +178,7 @@ async function submitQuestion(payload) {
   voiceActive.value = false;
   question.value = payload.text;
   saveDraft();
-  await send(false, payload);
+  return await send(false, payload);
 }
 function reenter(message) {
   if (busy.value || loading.value || voiceActive.value) return;
@@ -217,131 +228,144 @@ onUnmounted(() => {
 </script>
 <template>
   <section class="ask-page chat-page">
-    <p v-if="loading" role="status">대화를 불러오고 있어요…</p>
-    <div
-      v-if="!messages.length && !loading && !conversationId"
-      class="chat-examples"
-    >
-      <p class="section-label">예시 질문</p>
-      <div class="suggestion-grid">
-        <button
-          v-for="text in exampleQuestions"
-          :key="text"
-          type="button"
-          class="suggestion-card"
-          :disabled="voiceActive"
-          @click="selectExample(text)"
-        >
-          <strong>{{ text }}</strong>
-        </button>
-      </div>
-    </div>
-    <p v-if="speechNotice" class="info-banner" role="status">
-      {{ speechNotice }}
-    </p>
-    <div
-      v-if="messages.length"
-      class="conversation chat-thread"
-      role="log"
-      aria-label="질문과 답변"
-    >
-      <article
-        v-for="message in messages"
-        :key="message.id"
-        class="message-pair"
+    <div class="chat-scroll-area">
+      <p v-if="loading" role="status">대화를 불러오고 있어요…</p>
+      <div
+        v-if="!messages.length && !loading && !conversationId"
+        class="chat-examples"
       >
-        <div class="question-bubble">
-          <span class="sr-only">내 질문: </span>{{ message.question }}
+        <p class="section-label">예시 질문</p>
+        <div class="suggestion-grid">
+          <button
+            v-for="text in exampleQuestions"
+            :key="text"
+            type="button"
+            class="suggestion-card"
+            :disabled="voiceActive"
+            @click="selectExample(text)"
+          >
+            <strong>{{ text }}</strong>
+          </button>
         </div>
-        <div class="answer-card">
-          <div class="answer-heading">
-            <span class="assistant-avatar"><Sparkles :size="17" /></span
-            ><strong>프랜자이저</strong><StatusBadge :status="message.status" />
+      </div>
+      <p v-if="speechNotice" class="info-banner" role="status">
+        {{ speechNotice }}
+      </p>
+      <div
+        v-if="messages.length"
+        class="conversation chat-thread"
+        role="log"
+        aria-label="질문과 답변"
+      >
+        <article
+          v-for="message in messages"
+          :key="message.id"
+          class="message-pair"
+        >
+          <div class="question-bubble">
+            <span class="sr-only">내 질문: </span>{{ message.question }}
           </div>
-          <template v-if="message.result">
-            <AnswerDetails
-              :result="message.result"
-              :question="message.question"
-              :disable-speech="voiceActive"
-              :allow-read-aloud="auth.user.role !== 'prospect'"
-              :external-reading="
-                readingAnswer &&
-                readingQuestionId === message.result.question_id
-              "
-              @toggle-read="toggleReading(message.result)"
-              @source="source = $event"
-            />
-            <div class="answer-footer">
-              <span>이 답변이 도움이 되었나요?</span
-              ><button
-                class="icon-button"
-                :class="{
-                  chosen: feedbackState[message.result.question_id] === true,
-                }"
-                aria-label="도움 됐어요"
-                @click="helpful(message.result, true)"
-              >
-                <ThumbsUp :size="16" /></button
-              ><button
-                class="icon-button"
-                :class="{
-                  chosen: feedbackState[message.result.question_id] === false,
-                }"
-                aria-label="도움이 안 됐어요"
-                @click="helpful(message.result, false)"
-              >
-                <ThumbsDown :size="16" /></button
-              ><small v-if="message.result.question_id in feedbackState"
-                >의견이 저장됐습니다.</small
-              >
+          <div class="answer-card">
+            <div class="answer-heading">
+              <span class="assistant-avatar"><Sparkles :size="17" /></span
+              ><strong>프랜자이저</strong
+              ><StatusBadge :status="message.status" />
             </div>
-          </template>
-          <div v-else class="history-state">
-            <p v-if="message.status === 'processing'">
-              이 질문은 처리 중입니다. 잠시 후 대화 상태를 새로 확인해 주세요
-            </p>
-            <template v-else
-              ><p>
-                질문을 처리하지 못했습니다. 근거 부족이 아닌 시스템 또는 연결
-                오류입니다.
+            <template v-if="message.result">
+              <AnswerDetails
+                :result="message.result"
+                :question="message.question"
+                :disable-speech="voiceActive"
+                :allow-read-aloud="auth.user.role !== 'prospect'"
+                :external-reading="
+                  readingAnswer &&
+                  readingQuestionId === message.result.question_id
+                "
+                @toggle-read="toggleReading(message.result)"
+                @source="source = $event"
+              />
+              <div class="answer-footer">
+                <span>이 답변이 도움이 되었나요?</span
+                ><button
+                  class="icon-button"
+                  :class="{
+                    chosen: feedbackState[message.result.question_id] === true,
+                  }"
+                  aria-label="도움 됐어요"
+                  @click="helpful(message.result, true)"
+                >
+                  <ThumbsUp :size="16" /></button
+                ><button
+                  class="icon-button"
+                  :class="{
+                    chosen: feedbackState[message.result.question_id] === false,
+                  }"
+                  aria-label="도움이 안 됐어요"
+                  @click="helpful(message.result, false)"
+                >
+                  <ThumbsDown :size="16" /></button
+                ><small v-if="message.result.question_id in feedbackState"
+                  >의견이 저장됐습니다.</small
+                >
+              </div>
+            </template>
+            <div v-else class="history-state">
+              <p v-if="message.status === 'processing'">
+                이 질문은 처리 중입니다. 잠시 후 대화 상태를 새로 확인해 주세요
               </p>
-              <small v-if="message.errorCode"
-                >오류 코드 · {{ message.errorCode }}</small
-              ></template
-            >
-            <div class="voice-actions">
-              <button
-                class="button small secondary"
-                :disabled="busy || voiceActive"
-                @click="loadConversation"
+              <template v-else
+                ><p>
+                  질문을 처리하지 못했습니다. 근거 부족이 아닌 시스템 또는 연결
+                  오류입니다.
+                </p>
+                <small v-if="message.errorCode"
+                  >오류 코드 · {{ message.errorCode }}</small
+                ></template
               >
-                대화 상태 새로고침</button
-              ><button
-                class="button small ghost"
-                :disabled="busy || voiceActive"
-                @click="reenter(message)"
-              >
-                질문 다시 입력
-              </button>
+              <div class="voice-actions">
+                <button
+                  class="button small secondary"
+                  :disabled="busy || voiceActive"
+                  @click="loadConversation"
+                >
+                  대화 상태 새로고침</button
+                ><button
+                  class="button small ghost"
+                  :disabled="busy || voiceActive"
+                  @click="reenter(message)"
+                >
+                  질문 다시 입력
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </article>
+        </article>
+      </div>
+      <p v-if="busy" class="loading-line" role="status">
+        <span class="pulse-dot"></span>‘{{ activeQuestion }}’에 필요한 문서를
+        확인하고 있어요…
+      </p>
+      <ErrorNotice
+        :error="error"
+        @retry="pending ? send(true) : loadConversation()"
+      /><ErrorNotice :error="feedbackError" />
+      <div ref="bottom"></div>
     </div>
-    <p v-if="busy" class="loading-line" role="status">
-      <span class="pulse-dot"></span>‘{{ activeQuestion }}’에 필요한 문서를
-      확인하고 있어요…
-    </p>
-    <ErrorNotice
-      :error="error"
-      @retry="pending ? send(true) : loadConversation()"
-    /><ErrorNotice :error="feedbackError" />
-    <div ref="bottom"></div>
     <div class="chat-composer">
+      <HandsFreeVoice
+        ref="handsFreeControl"
+        :profile-key="`${isMock ? 'demo' : 'live'}:${userId}`"
+        :ask="(text) => submitQuestion({ text, readAnswer: false })"
+        :active="active"
+        :disabled="busy || loading || voiceActive || readingAnswer"
+        :allow-read-aloud="auth.user.role !== 'prospect'"
+        @enabled="handsFreeEnabled = $event"
+        @listening="setVoiceActive"
+      />
       <VoiceInput
         :input-id="`question-input-${tabId}`"
         v-model="question"
-        :disabled="busy || loading"
+        :disabled="busy || loading || handsFreeEnabled"
         :allow-read-aloud="auth.user.role !== 'prospect'"
         :reading-answer="readingAnswer"
         @stop-reading="stopReading"

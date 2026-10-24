@@ -51,6 +51,8 @@ export function browserListen({
   onLevel = () => {},
   onStopReady = () => {},
   maxSeconds = 60,
+  allowEmpty = false,
+  stopOnFinal = () => false,
 } = {}) {
   return new Promise((resolve, reject) => {
     const Recognition =
@@ -87,7 +89,7 @@ export function browserListen({
       settled = true;
       cleanup();
       if (error) reject(error);
-      else if (text.trim()) resolve(text.trim());
+      else if (text.trim() || allowEmpty) resolve(text.trim());
       else
         reject(
           new Error(
@@ -108,9 +110,19 @@ export function browserListen({
         .join(" ");
       onPartial(text);
       onLevel(0.6);
+      if (
+        event.results[event.results.length - 1]?.isFinal &&
+        stopOnFinal(text)
+      ) {
+        recognition.stop();
+      }
     };
     recognition.onspeechend = () => recognition.stop();
-    recognition.onerror = (event) =>
+    recognition.onerror = (event) => {
+      if (allowEmpty && event.error === "no-speech") {
+        finish();
+        return;
+      }
       finish(
         new Error(
           {
@@ -125,6 +137,7 @@ export function browserListen({
           }[event.error] || "음성 인식에 실패했습니다. 다시 시도해 주세요",
         ),
       );
+    };
     recognition.onend = () => finish();
     if (signal?.aborted) {
       finish(abortError());
@@ -321,43 +334,83 @@ export async function recordAudio({
     }
   });
 }
-export function speakLocally(text, { signal } = {}) {
-  const voice = globalThis.speechSynthesis
-    ?.getVoices()
-    .find((v) => v.localService && v.lang.startsWith("ko"));
-  if (!voice || !globalThis.SpeechSynthesisUtterance)
-    return Promise.resolve(false);
+export function preferredKoreanVoice(voices) {
+  const score = (voice) =>
+    /premium|프리미엄/i.test(voice.name)
+      ? 30
+      : /enhanced|고품질|natural|자연/i.test(voice.name)
+        ? 20
+        : voice.default
+          ? 10
+          : 0;
+  return voices
+    .filter((voice) => voice.localService && /^ko(?:[-_]|$)/i.test(voice.lang))
+    .sort((a, b) => score(b) - score(a))[0];
+}
+async function loadedVoice(synthesis, signal) {
+  const existing = preferredKoreanVoice(synthesis.getVoices());
+  if (existing || signal?.aborted) return existing;
+  return new Promise((resolve) => {
+    let timer;
+    const finish = () => {
+      clearTimeout(timer);
+      synthesis.removeEventListener?.("voiceschanged", changed);
+      signal?.removeEventListener("abort", finish);
+      resolve(
+        signal?.aborted ? null : preferredKoreanVoice(synthesis.getVoices()),
+      );
+    };
+    const changed = () => {
+      if (preferredKoreanVoice(synthesis.getVoices())) finish();
+    };
+    synthesis.addEventListener?.("voiceschanged", changed);
+    signal?.addEventListener("abort", finish, { once: true });
+    timer = setTimeout(finish, 1000);
+    if (signal?.aborted) finish();
+  });
+}
+export async function speakLocally(text, { signal } = {}) {
+  const synthesis = globalThis.speechSynthesis;
+  if (!synthesis || !globalThis.SpeechSynthesisUtterance || signal?.aborted)
+    return false;
+  const voice = await loadedVoice(synthesis, signal);
+  if (!voice || signal?.aborted) return false;
   return new Promise((resolve) => {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.voice = voice;
     utterance.lang = "ko-KR";
-    utterance.rate = 1.05;
+    utterance.rate = 1;
+    utterance.pitch = 1;
     let done = false;
-    const finish = () => {
+    const finish = (ok = true) => {
       if (done) return;
       done = true;
       clearTimeout(timeout);
       signal?.removeEventListener("abort", abort);
-      resolve(true);
+      resolve(ok);
     };
     const abort = () => {
-      speechSynthesis.cancel();
-      finish();
+      synthesis.cancel();
+      finish(false);
     };
-    utterance.onend = finish;
-    utterance.onerror = finish;
+    utterance.onend = () => finish(true);
+    utterance.onerror = () => finish(false);
     const timeout = setTimeout(
       () => {
-        speechSynthesis.cancel();
-        finish();
+        synthesis.cancel();
+        finish(false);
       },
       Math.max(5000, text.length * 300),
     );
     if (signal?.aborted) {
-      finish();
+      finish(false);
       return;
     }
     signal?.addEventListener("abort", abort, { once: true });
-    speechSynthesis.speak(utterance);
+    try {
+      synthesis.speak(utterance);
+    } catch {
+      finish(false);
+    }
   });
 }

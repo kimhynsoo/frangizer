@@ -403,7 +403,7 @@ onMounted(async () => {
               >
             </div>
             <div class="table-scroll">
-              <table>
+              <table class="notice-target-table">
                 <thead>
                   <tr>
                     <th>점포</th>
@@ -413,15 +413,15 @@ onMounted(async () => {
                 </thead>
                 <tbody>
                   <tr v-for="item in targets" :key="item.store_id">
-                    <td>{{ item.store_name }}</td>
-                    <td>
+                    <td data-label="점포">{{ item.store_name }}</td>
+                    <td data-label="지역 코드">
                       {{
                         regions.find(
                           (region) => region.code === item.region_code,
                         )?.name || item.region_code
                       }}
                     </td>
-                    <td>
+                    <td data-label="확인 시각">
                       {{
                         item.acknowledged_at
                           ? new Date(item.acknowledged_at).toLocaleString(

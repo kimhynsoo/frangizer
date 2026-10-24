@@ -384,7 +384,7 @@ onUnmounted(() => {
       </div>
       <p v-if="busy" class="loading-line" role="status">문서를 불러오는 중…</p>
       <div class="table-scroll">
-        <table>
+        <table class="document-table">
           <thead>
             <tr>
               <th>문서명</th>
@@ -397,7 +397,7 @@ onUnmounted(() => {
           </thead>
           <tbody>
             <tr v-for="row in rows" :key="row.document_id">
-              <td>
+              <td data-label="문서명">
                 <div class="document-title">
                   <span class="file-icon"><FileText :size="20" /></span>
                   <div>
@@ -415,8 +415,8 @@ onUnmounted(() => {
                   </div>
                 </div>
               </td>
-              <td>v{{ row.selected_version }}</td>
-              <td>
+              <td data-label="버전">v{{ row.selected_version }}</td>
+              <td data-label="적용일">
                 {{
                   row.effective_from
                     ? new Date(row.effective_from).toLocaleDateString("ko-KR", {
@@ -425,15 +425,15 @@ onUnmounted(() => {
                     : "—"
                 }}
               </td>
-              <td>
+              <td data-label="배포 상태">
                 <StatusBadge :status="row.lifecycle" /><StatusBadge
                   :status="application(row)"
                 />
               </td>
-              <td>
+              <td data-label="검색 준비">
                 <StatusBadge :status="row.index_status" />
               </td>
-              <td>
+              <td data-label="작업">
                 <button class="button small ghost" @click="openHistory(row)">
                   판본 보기<ArrowUpRight :size="14" />
                 </button>

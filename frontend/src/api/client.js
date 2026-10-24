@@ -1,10 +1,8 @@
 import axios from "axios";
 
-export const isMock = import.meta.env.VITE_USE_MOCK !== "false";
+export const isMock = import.meta.env.VITE_USE_MOCK === "true";
 const configuredBase = import.meta.env.VITE_API_BASE_URL?.trim();
-export const baseURL =
-  configuredBase ||
-  (import.meta.env.DEV ? "http://localhost:8080/api/v1" : "/api/v1");
+export const baseURL = configuredBase || "/api/v1";
 const tokenKey = `frangizer.${isMock ? "demo" : "live"}.token`;
 export const tokenStorage = {
   get: () => sessionStorage.getItem(tokenKey),

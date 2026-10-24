@@ -2,6 +2,7 @@
 import { ref, computed, watch, onUnmounted } from "vue";
 import { ArrowUpRight, BookOpen, Volume2 } from "@lucide/vue";
 import { speakLocally } from "../api/voice";
+import { spokenAnswer, cleanAnswerText } from "../api/spoken-answer";
 const props = defineProps({
   result: Object,
   externalReading: { type: Boolean, default: null },
@@ -28,10 +29,9 @@ async function read() {
   speech = new AbortController();
   reading.value = true;
   const result = props.result;
-  const ok = await speakLocally(
-    `${result.answer} ${(result.steps || []).join(" ")}`,
-    { signal: speech.signal },
-  );
+  const ok = await speakLocally(spokenAnswer(result, props.question), {
+    signal: speech.signal,
+  });
   if (!ok)
     notice.value =
       "기기에 설치된 한국어 읽기 음성이 없습니다. 화면의 답변을 확인해 주세요";
@@ -58,7 +58,7 @@ watch(
         })
       }}
     </p>
-    <p class="answer-text">{{ result.answer }}</p>
+    <p class="answer-text">{{ cleanAnswerText(result.answer) }}</p>
     <button
       v-if="allowReadAloud"
       class="button ghost small"

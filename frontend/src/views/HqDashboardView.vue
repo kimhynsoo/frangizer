@@ -409,52 +409,71 @@ onMounted(async () => {
           <span class="muted">개인정보를 마스킹한 질문</span>
         </div>
         <form class="event-filters" @submit.prevent="load()">
-          <select
-            v-model="filters.category"
-            aria-label="문의 분류"
-            @change="filters.topic_id = ''"
-          >
-            <option value="">전체 분류</option>
-            <option v-for="(label, key) in categories" :value="key" :key="key">
-              {{ label }}
-            </option></select
-          ><select v-model="filters.topic_id" aria-label="문의 주제">
-            <option value="">전체 주제</option>
-            <option
-              v-for="topic in visibleTopics"
-              :key="topic.id"
-              :value="topic.id"
+          <label class="event-filter-field"
+            ><span>문의 분류</span
+            ><select
+              v-model="filters.category"
+              aria-label="문의 분류"
+              @change="filters.topic_id = ''"
             >
-              {{ topic.label }}
-            </option></select
-          ><select v-model="filters.answer_status" aria-label="답변 상태">
-            <option value="">전체 답변 상태</option>
-            <option value="answered">근거 확인</option>
-            <option value="needs_review">추가 확인 필요</option>
-            <option value="handoff">담당자 확인 필요</option>
-            <option value="processing">답변 중</option>
-            <option value="system_error">시스템 오류</option></select
-          ><select v-model="filters.resolution_status" aria-label="처리 상태">
-            <option value="">전체 처리 상태</option>
-            <option value="unknown">미확인</option>
-            <option value="open">접수</option>
-            <option value="in_progress">처리 중</option>
-            <option value="closed">종결</option></select
-          ><select
-            v-model="filters.classification_status"
-            aria-label="분류 진행 상태"
-          >
-            <option value="">전체 분류 진행 상태</option>
-            <option value="pending">분류 대기</option>
-            <option value="classified">분류 완료</option>
-            <option value="failed">분류 실패</option>
-            <option value="corrected">분류 수정됨</option></select
+              <option value="">전체 분류</option>
+              <option
+                v-for="(label, key) in categories"
+                :value="key"
+                :key="key"
+              >
+                {{ label }}
+              </option>
+            </select></label
+          ><label class="event-filter-field"
+            ><span>문의 주제</span
+            ><select v-model="filters.topic_id" aria-label="문의 주제">
+              <option value="">전체 주제</option>
+              <option
+                v-for="topic in visibleTopics"
+                :key="topic.id"
+                :value="topic.id"
+              >
+                {{ topic.label }}
+              </option>
+            </select></label
+          ><label class="event-filter-field"
+            ><span>답변 상태</span
+            ><select v-model="filters.answer_status" aria-label="답변 상태">
+              <option value="">전체 답변 상태</option>
+              <option value="answered">근거 확인</option>
+              <option value="needs_review">추가 확인 필요</option>
+              <option value="handoff">담당자 확인 필요</option>
+              <option value="processing">답변 중</option>
+              <option value="system_error">시스템 오류</option>
+            </select></label
+          ><label class="event-filter-field"
+            ><span>처리 상태</span
+            ><select v-model="filters.resolution_status" aria-label="처리 상태">
+              <option value="">전체 처리 상태</option>
+              <option value="unknown">미확인</option>
+              <option value="open">접수</option>
+              <option value="in_progress">처리 중</option>
+              <option value="closed">종결</option>
+            </select></label
+          ><label class="event-filter-field"
+            ><span>분류 진행 상태</span
+            ><select
+              v-model="filters.classification_status"
+              aria-label="분류 진행 상태"
+            >
+              <option value="">전체 분류 진행 상태</option>
+              <option value="pending">분류 대기</option>
+              <option value="classified">분류 완료</option>
+              <option value="failed">분류 실패</option>
+              <option value="corrected">분류 수정됨</option>
+            </select></label
           ><button class="button small secondary" :disabled="busy">
             필터 적용
           </button>
         </form>
         <div class="table-scroll">
-          <table>
+          <table class="inquiry-table">
             <thead>
               <tr>
                 <th>질문</th>
@@ -467,25 +486,25 @@ onMounted(async () => {
             </thead>
             <tbody>
               <tr v-for="row in rows" :key="row.question_id">
-                <td class="question-cell">
+                <td data-label="질문" class="question-cell">
                   {{ row.question_redacted
                   }}<small>{{ date(row.created_at) }}</small>
                 </td>
-                <td>{{ row.store_name || "예비 점주" }}</td>
-                <td>{{ categories[row.category] }}</td>
-                <td>
+                <td data-label="점포">{{ row.store_name || "예비 점주" }}</td>
+                <td data-label="분류">{{ categories[row.category] }}</td>
+                <td data-label="답변 상태">
                   <StatusBadge :status="row.answer_status" />
                 </td>
-                <td>
+                <td data-label="처리 상태">
                   <StatusBadge :status="row.resolution_status" />
                 </td>
-                <td>
+                <td data-label="작업" class="inquiry-action">
                   <button
-                    class="icon-button"
+                    class="button small secondary inquiry-detail-button"
                     aria-label="문의 상세 보기"
                     @click="open(row)"
                   >
-                    <ArrowUpRight :size="17" />
+                    상세 보기<ArrowUpRight :size="17" />
                   </button>
                 </td>
               </tr>
@@ -507,7 +526,7 @@ onMounted(async () => {
       @click.self="!saving && (selected = null)"
     >
       <section
-        class="source-panel"
+        class="source-panel inquiry-detail-panel"
         v-focus-trap="() => !saving && (selected = null)"
         role="dialog"
         aria-modal="true"
@@ -525,21 +544,25 @@ onMounted(async () => {
           </button>
         </div>
         <h2 id="event-title">{{ selected.question_redacted }}</h2>
-        <p class="muted">
-          {{ selected.store_name || "예비 점주" }} ·
-          {{ date(selected.created_at) }}
-        </p>
-        <StatusBadge :status="selected.answer_status" />
-        <p>
-          <span class="muted">질문 분류 · </span
-          ><StatusBadge
-            :status="
-              selected.classification_status === 'failed'
-                ? 'classification_failed'
-                : selected.classification_status
-            "
-          />
-        </p>
+        <div class="inquiry-detail-meta">
+          <p class="muted">
+            {{ selected.store_name || "예비 점주" }} ·
+            {{ date(selected.created_at) }}
+          </p>
+          <div class="inquiry-detail-statuses">
+            <StatusBadge :status="selected.answer_status" />
+            <p>
+              <span class="muted">질문 분류 · </span
+              ><StatusBadge
+                :status="
+                  selected.classification_status === 'failed'
+                    ? 'classification_failed'
+                    : selected.classification_status
+                "
+              />
+            </p>
+          </div>
+        </div>
         <AnswerDetails
           v-if="selected.result"
           :result="selected.result"

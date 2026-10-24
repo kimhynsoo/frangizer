@@ -105,7 +105,11 @@ onUnmounted(() => window.removeEventListener("session-expired", expired));
 </script>
 <template>
   <RouterView v-if="route.name === 'login'" />
-  <div v-else class="workspace">
+  <div
+    v-else
+    class="workspace"
+    :class="{ 'chat-workspace': route.path === '/ask' }"
+  >
     <a class="skip-link" href="#main-content">본문으로 이동</a>
     <button
       v-if="menu"
@@ -220,5 +224,20 @@ onUnmounted(() => window.removeEventListener("session-expired", expired));
         }}</span>
       </footer>
     </div>
+    <nav class="mobile-bottom-nav" aria-label="모바일 주요 메뉴">
+      <RouterLink v-for="link in links" :key="link.path" :to="link.path">
+        <component :is="link.icon" :size="21" aria-hidden="true" />
+        <span>{{ link.label }}</span>
+        <span
+          v-if="
+            auth.user?.role === 'owner' &&
+            link.path === '/notices' &&
+            notices.unread
+          "
+          class="mobile-unread"
+          >{{ notices.unread }}</span
+        >
+      </RouterLink>
+    </nav>
   </div>
 </template>
