@@ -1,0 +1,31 @@
+{
+  "name": "frangizer-mobile-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4174",
+    "test": "vitest run",
+    "format": "prettier --write src tests index.html vite.config.js package.json README.md"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.61.0",
+    "axios": "^1.12.0",
+    "pinia": "^3.0.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.0",
+    "@vue/test-utils": "^2.5.1",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "happy-dom": "^21.0.4",
+    "prettier": "^3.9.10",
+    "vite": "^7.0.0",
+    "vitest": "^5.0.5",
+    "yaml": "^2.9.1"
+  }
+}
