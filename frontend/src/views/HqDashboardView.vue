@@ -16,6 +16,8 @@ import StatusBadge from "../components/StatusBadge.vue";
 import PageNav from "../components/PageNav.vue";
 import AnswerDetails from "../components/AnswerDetails.vue";
 import SourcePanel from "../components/SourcePanel.vue";
+import DateRangePicker from "../components/DateRangePicker.vue";
+import { koreaToday, daysBefore, dateRangeQuery } from "../date-range";
 const auth = useAuth(),
   data = ref(null),
   rows = ref([]),
@@ -33,7 +35,8 @@ const auth = useAuth(),
   edit = ref({}),
   activeQuery = ref({});
 const filters = ref({
-  week_start: "",
+  start_date: daysBefore(koreaToday(), 6),
+  end_date: koreaToday(),
   region_code: "",
   store_id: "",
   category: "",
@@ -84,22 +87,24 @@ async function allOptions(kind) {
   }
 }
 async function load(page = 1, apply = true) {
-  if (
-    apply &&
-    filters.value.week_start &&
-    new Date(`${filters.value.week_start}T00:00:00+09:00`).getUTCDay() !== 0
-  ) {
-    error.value = { message: "주 시작일은 월요일로 선택해 주세요." };
-    return;
+  if (apply) {
+    try {
+      const { start_date, end_date, ...other } = filters.value;
+      const range = dateRangeQuery(start_date, end_date);
+      activeQuery.value = {
+        ...Object.fromEntries(
+          Object.entries(other).filter(([, value]) => value !== ""),
+        ),
+        ...range,
+      };
+    } catch (e) {
+      error.value = { message: e.message };
+      return;
+    }
   }
-  // KST Monday midnight is UTC Sunday. API keeps all calendar boundaries in KST.
   const current = ++generation;
   busy.value = true;
   error.value = null;
-  if (apply)
-    activeQuery.value = Object.fromEntries(
-      Object.entries(filters.value).filter(([, v]) => v !== ""),
-    );
   const query = { ...activeQuery.value },
     {
       answer_status,
@@ -179,7 +184,7 @@ onMounted(async () => {
       <div>
         <span class="eyebrow">HEADQUARTERS OVERVIEW</span>
         <h1>질문을 모으면, 개선이 보입니다.</h1>
-        <p>매장에서 자주 묻는 내용과 추가 확인이 필요한 문의를 살펴보세요.</p>
+        <p>매장에서 자주 묻는 내용과 추가 확인이 필요한 문의를 살펴보세요</p>
       </div>
       <button
         class="button secondary small"
@@ -190,12 +195,15 @@ onMounted(async () => {
       </button>
     </div>
     <form class="filter-bar" @submit.prevent="load()">
-      <SlidersHorizontal :size="18" /><label
-        >조회 주<input
-          v-model="filters.week_start"
-          type="date"
-          aria-label="조회 주 월요일" /></label
-      ><label
+      <SlidersHorizontal :size="18" />
+      <div class="date-range-field">
+        <span>조회 기간</span
+        ><DateRangePicker
+          v-model:start="filters.start_date"
+          v-model:end="filters.end_date"
+        />
+      </div>
+      <label
         >지역<select
           v-model="filters.region_code"
           @change="filters.store_id = ''"
@@ -241,7 +249,7 @@ onMounted(async () => {
         ><span
           class="badge"
           :class="data.period.is_partial ? 'needs_review' : ''"
-          >{{ data.period.is_partial ? "진행 중" : "완료 주" }}</span
+          >{{ data.period.is_partial ? "진행 중" : "조회 기간" }}</span
         ><span class="muted"
           >KST ·
           {{ activeQuery.user_role === "prospect" ? "예비 점주" : "운영 점주" }}
@@ -278,7 +286,10 @@ onMounted(async () => {
           ><strong>{{ percent(data.metrics.guidance_rate) }}</strong>
           <p>{{ data.metrics.answered_count }}건 근거 답변 · 정상 응답 기준</p>
         </article>
-        <article class="metric-card warm">
+        <article
+          class="metric-card"
+          :class="{ warm: data.metrics.review_required_count > 0 }"
+        >
           <span><CircleHelp :size="17" />추가 검토 필요</span
           ><strong
             >{{ data.metrics.review_required_count }}<small>건</small></strong
@@ -337,26 +348,30 @@ onMounted(async () => {
             <h2>자주 묻는 주제</h2>
             <span class="muted">문의 건수</span>
           </div>
-          <article
-            v-for="(topic, i) in data.top_topics"
-            :key="topic.topic_id"
-            class="topic-row"
-          >
-            <span class="topic-rank">{{ String(i + 1).padStart(2, "0") }}</span>
-            <div>
-              <strong>{{ topic.label }}</strong>
-              <div class="bar-track">
-                <span
-                  :style="{
-                    width: `${(topic.count / (data.top_topics[0]?.count || 1)) * 100}%`,
-                  }"
-                ></span>
+          <div class="dashboard-card-body">
+            <article
+              v-for="(topic, i) in data.top_topics"
+              :key="topic.topic_id"
+              class="topic-row"
+            >
+              <span class="topic-rank">{{
+                String(i + 1).padStart(2, "0")
+              }}</span>
+              <div>
+                <strong>{{ topic.label }}</strong>
+                <div class="bar-track">
+                  <span
+                    :style="{
+                      width: `${(topic.count / (data.top_topics[0]?.count || 1)) * 100}%`,
+                    }"
+                  ></span>
+                </div>
               </div>
+              <strong>{{ topic.count }}<small>건</small></strong>
+            </article>
+            <div v-if="!data.top_topics.length" class="empty-state">
+              이 기간에는 집계할 주제가 없습니다.
             </div>
-            <strong>{{ topic.count }}<small>건</small></strong>
-          </article>
-          <div v-if="!data.top_topics.length" class="empty-state">
-            이 기간에는 집계할 주제가 없습니다.
           </div>
           <p class="surface-footnote">
             질문 빈도는 문서·교육 개선을 위한 참고 지표입니다.
@@ -367,19 +382,21 @@ onMounted(async () => {
             <h2>지역별 문의</h2>
             <span class="muted">점포 운영 현황</span>
           </div>
-          <div
-            v-for="region in data.by_region"
-            :key="region.region_code"
-            class="region-row"
-          >
-            <div>
-              <strong>{{ region.region_name }}</strong
-              ><span v-if="region.small_sample" class="badge">표본 적음</span>
+          <div class="dashboard-card-body">
+            <div
+              v-for="region in data.by_region"
+              :key="region.region_code"
+              class="region-row"
+            >
+              <div>
+                <strong>{{ region.region_name }}</strong
+                ><span v-if="region.small_sample" class="badge">표본 적음</span>
+              </div>
+              <strong>{{ region.metrics.total }}<small>건</small></strong>
             </div>
-            <strong>{{ region.metrics.total }}<small>건</small></strong>
-          </div>
-          <div v-if="!data.by_region.length" class="empty-state">
-            표시할 지역 집계가 없습니다.
+            <div v-if="!data.by_region.length" class="empty-state">
+              표시할 지역 집계가 없습니다.
+            </div>
           </div>
           <p class="surface-footnote">
             접수 당시의 점포 지역을 기준으로 집계합니다.
@@ -392,52 +409,71 @@ onMounted(async () => {
           <span class="muted">개인정보를 마스킹한 질문</span>
         </div>
         <form class="event-filters" @submit.prevent="load()">
-          <select
-            v-model="filters.category"
-            aria-label="문의 분류"
-            @change="filters.topic_id = ''"
-          >
-            <option value="">전체 분류</option>
-            <option v-for="(label, key) in categories" :value="key" :key="key">
-              {{ label }}
-            </option></select
-          ><select v-model="filters.topic_id" aria-label="문의 주제">
-            <option value="">전체 주제</option>
-            <option
-              v-for="topic in visibleTopics"
-              :key="topic.id"
-              :value="topic.id"
+          <label class="event-filter-field"
+            ><span>문의 분류</span
+            ><select
+              v-model="filters.category"
+              aria-label="문의 분류"
+              @change="filters.topic_id = ''"
             >
-              {{ topic.label }}
-            </option></select
-          ><select v-model="filters.answer_status" aria-label="답변 상태">
-            <option value="">전체 답변 상태</option>
-            <option value="answered">근거 확인</option>
-            <option value="needs_review">추가 확인 필요</option>
-            <option value="handoff">담당자 확인 필요</option>
-            <option value="processing">답변 중</option>
-            <option value="system_error">시스템 오류</option></select
-          ><select v-model="filters.resolution_status" aria-label="처리 상태">
-            <option value="">전체 처리 상태</option>
-            <option value="unknown">미확인</option>
-            <option value="open">접수</option>
-            <option value="in_progress">처리 중</option>
-            <option value="closed">종결</option></select
-          ><select
-            v-model="filters.classification_status"
-            aria-label="분류 진행 상태"
-          >
-            <option value="">전체 분류 진행 상태</option>
-            <option value="pending">분류 대기</option>
-            <option value="classified">분류 완료</option>
-            <option value="failed">분류 실패</option>
-            <option value="corrected">분류 수정됨</option></select
+              <option value="">전체 분류</option>
+              <option
+                v-for="(label, key) in categories"
+                :value="key"
+                :key="key"
+              >
+                {{ label }}
+              </option>
+            </select></label
+          ><label class="event-filter-field"
+            ><span>문의 주제</span
+            ><select v-model="filters.topic_id" aria-label="문의 주제">
+              <option value="">전체 주제</option>
+              <option
+                v-for="topic in visibleTopics"
+                :key="topic.id"
+                :value="topic.id"
+              >
+                {{ topic.label }}
+              </option>
+            </select></label
+          ><label class="event-filter-field"
+            ><span>답변 상태</span
+            ><select v-model="filters.answer_status" aria-label="답변 상태">
+              <option value="">전체 답변 상태</option>
+              <option value="answered">근거 확인</option>
+              <option value="needs_review">추가 확인 필요</option>
+              <option value="handoff">담당자 확인 필요</option>
+              <option value="processing">답변 중</option>
+              <option value="system_error">시스템 오류</option>
+            </select></label
+          ><label class="event-filter-field"
+            ><span>처리 상태</span
+            ><select v-model="filters.resolution_status" aria-label="처리 상태">
+              <option value="">전체 처리 상태</option>
+              <option value="unknown">미확인</option>
+              <option value="open">접수</option>
+              <option value="in_progress">처리 중</option>
+              <option value="closed">종결</option>
+            </select></label
+          ><label class="event-filter-field"
+            ><span>분류 진행 상태</span
+            ><select
+              v-model="filters.classification_status"
+              aria-label="분류 진행 상태"
+            >
+              <option value="">전체 분류 진행 상태</option>
+              <option value="pending">분류 대기</option>
+              <option value="classified">분류 완료</option>
+              <option value="failed">분류 실패</option>
+              <option value="corrected">분류 수정됨</option>
+            </select></label
           ><button class="button small secondary" :disabled="busy">
             필터 적용
           </button>
         </form>
         <div class="table-scroll">
-          <table>
+          <table class="inquiry-table">
             <thead>
               <tr>
                 <th>질문</th>
@@ -450,21 +486,25 @@ onMounted(async () => {
             </thead>
             <tbody>
               <tr v-for="row in rows" :key="row.question_id">
-                <td class="question-cell">
+                <td data-label="질문" class="question-cell">
                   {{ row.question_redacted
                   }}<small>{{ date(row.created_at) }}</small>
                 </td>
-                <td>{{ row.store_name || "예비 점주" }}</td>
-                <td>{{ categories[row.category] }}</td>
-                <td><StatusBadge :status="row.answer_status" /></td>
-                <td><StatusBadge :status="row.resolution_status" /></td>
-                <td>
+                <td data-label="점포">{{ row.store_name || "예비 점주" }}</td>
+                <td data-label="분류">{{ categories[row.category] }}</td>
+                <td data-label="답변 상태">
+                  <StatusBadge :status="row.answer_status" />
+                </td>
+                <td data-label="처리 상태">
+                  <StatusBadge :status="row.resolution_status" />
+                </td>
+                <td data-label="작업" class="inquiry-action">
                   <button
-                    class="icon-button"
+                    class="button small secondary inquiry-detail-button"
                     aria-label="문의 상세 보기"
                     @click="open(row)"
                   >
-                    <ArrowUpRight :size="17" />
+                    상세 보기<ArrowUpRight :size="17" />
                   </button>
                 </td>
               </tr>
@@ -486,7 +526,7 @@ onMounted(async () => {
       @click.self="!saving && (selected = null)"
     >
       <section
-        class="source-panel"
+        class="source-panel inquiry-detail-panel"
         v-focus-trap="() => !saving && (selected = null)"
         role="dialog"
         aria-modal="true"
@@ -504,21 +544,25 @@ onMounted(async () => {
           </button>
         </div>
         <h2 id="event-title">{{ selected.question_redacted }}</h2>
-        <p class="muted">
-          {{ selected.store_name || "예비 점주" }} ·
-          {{ date(selected.created_at) }}
-        </p>
-        <StatusBadge :status="selected.answer_status" />
-        <p>
-          <span class="muted">질문 분류 · </span
-          ><StatusBadge
-            :status="
-              selected.classification_status === 'failed'
-                ? 'classification_failed'
-                : selected.classification_status
-            "
-          />
-        </p>
+        <div class="inquiry-detail-meta">
+          <p class="muted">
+            {{ selected.store_name || "예비 점주" }} ·
+            {{ date(selected.created_at) }}
+          </p>
+          <div class="inquiry-detail-statuses">
+            <StatusBadge :status="selected.answer_status" />
+            <p>
+              <span class="muted">질문 분류 · </span
+              ><StatusBadge
+                :status="
+                  selected.classification_status === 'failed'
+                    ? 'classification_failed'
+                    : selected.classification_status
+                "
+              />
+            </p>
+          </div>
+        </div>
         <AnswerDetails
           v-if="selected.result"
           :result="selected.result"
@@ -529,7 +573,7 @@ onMounted(async () => {
           <p>
             {{
               selected.answer_status === "processing"
-                ? "아직 답변을 처리하고 있습니다. 잠시 후 최신 문의를 다시 불러오세요."
+                ? "아직 답변을 처리하고 있습니다. 잠시 후 최신 문의를 다시 불러오세요"
                 : "시스템 오류로 답변 결과가 없습니다. 근거 부족으로 처리된 것이 아닙니다."
             }}
           </p>

@@ -125,6 +125,21 @@ services:
         condition: service_healthy
       rag:
         condition: service_healthy
+    # Local editing / git pull: rebuild the same API-mode image when frontend files change.
+    # Start the watcher separately: docker compose watch --no-up --prune=false web
+    develop:
+      watch:
+        - action: rebuild
+          path: ./frontend
+          ignore:
+            - node_modules/
+            - dist/
+            - tests/
+            - .env
+            - .env.*
+            - README.md
+        - action: rebuild
+          path: ./nginx
     restart: unless-stopped
 
 volumes:

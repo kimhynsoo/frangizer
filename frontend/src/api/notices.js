@@ -32,7 +32,7 @@ export async function listOutstanding({ page = 1, page_size = 10 } = {}) {
       const count = response.summary?.unacknowledged_count;
       if (!Number.isInteger(count) || count < 0)
         throw new Error(
-          "점포 확인 현황을 확인하지 못했습니다. 다시 시도해 주세요.",
+          "점포 확인 현황을 확인하지 못했습니다. 다시 시도해 주세요",
         );
       if (count > 0) outstanding.push(batch[index]);
     });

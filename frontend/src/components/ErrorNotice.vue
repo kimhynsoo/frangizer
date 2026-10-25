@@ -9,7 +9,7 @@ defineEmits(["retry"]);
     <small v-if="error.errorCode">오류 코드 · {{ error.errorCode }}</small>
     <small v-if="error.jobId">작업 ID · {{ error.jobId }}</small>
     <p v-if="error.retryAfter">
-      {{ error.retryAfter }}초 후 다시 시도해 주세요.
+      {{ error.retryAfter }}초 후 다시 시도해 주세요
     </p>
     <p v-for="(field, i) in error.details || []" :key="i">
       {{ field.field }}: {{ field.message }}

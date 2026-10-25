@@ -5,7 +5,7 @@ WORKDIR /app
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
-# frontend/src/api/client.js runs in sample (mock) mode unless VITE_USE_MOCK is exactly "false"
+# Real API mode by default; VITE_USE_MOCK=true explicitly enables sample data
 ARG VITE_API_BASE_URL=/api/v1
 ARG VITE_USE_MOCK=false
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL \
