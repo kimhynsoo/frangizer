@@ -17,6 +17,9 @@ spring:
     multipart:
       max-file-size: 10MB
       max-request-size: 11MB
+  flyway:
+    # db/demo: 본사 대시보드 시연용 합성 질문 기록(반복 마이그레이션). 테스트 프로필은 스키마만 읽는다.
+    locations: classpath:db/migration,classpath:db/demo
 
 app:
   jwt:
