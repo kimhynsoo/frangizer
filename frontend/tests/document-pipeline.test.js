@@ -3,10 +3,11 @@ import { expect, it, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { pagePolicy, indexJobFailure } from "../src/api/documents";
 import ErrorNotice from "../src/components/ErrorNotice.vue";
-const { detail, list, upload } = vi.hoisted(() => ({
+const { detail, list, upload, versions } = vi.hoisted(() => ({
   detail: vi.fn(),
   list: vi.fn(),
   upload: vi.fn(),
+  versions: vi.fn(),
 }));
 vi.mock("../src/stores/auth", () => ({ useAuth: () => ({ can: () => true }) }));
 vi.mock("../src/api/documents", async (original) => ({
@@ -14,6 +15,7 @@ vi.mock("../src/api/documents", async (original) => ({
   detail,
   list,
   upload,
+  versions,
 }));
 import SourcePanel from "../src/components/SourcePanel.vue";
 it("포함 페이지 생략은 전체를 의미하고 중복은 제거한다", () => {
@@ -135,5 +137,61 @@ it("실제 등록 컴포넌트는 충돌한 페이지를 서버로 전송하지 
   await flushPromises();
   expect(upload).not.toHaveBeenCalled();
   expect(wrapper.text()).toContain("동시에 지정할 수 없습니다");
+  wrapper.unmount();
+});
+
+async function openVersionHistory() {
+  list.mockResolvedValue({
+    data: [
+      {
+        document_id: "history-doc",
+        title: "판본 확인 문서",
+        selected_version: "1.0",
+        selected_version_id: "history-doc-1.0",
+        lifecycle: "published",
+        index_status: "ready",
+        category: "recipe",
+        effective_from: "2026-10-01T00:00:00+09:00",
+      },
+    ],
+    meta: { page: 1, total_pages: 1, total: 1 },
+  });
+  const wrapper = mount(DocumentsView, {
+    global: { directives: { "focus-trap": {} } },
+  });
+  await flushPromises();
+  await wrapper
+    .findAll("button")
+    .find((b) => b.text().includes("판본 보기"))
+    .trigger("click");
+  return wrapper;
+}
+it("판본 보기는 즉시 팝업과 로딩 상태를 열고 닫은 뒤 도착한 응답은 무시한다", async () => {
+  let complete;
+  versions.mockReturnValueOnce(
+    new Promise((resolve) => {
+      complete = resolve;
+    }),
+  );
+  const wrapper = await openVersionHistory();
+  const dialog = wrapper.get('[role="dialog"]');
+  expect(dialog.text()).toContain("판본 확인 문서 · 판본 이력");
+  expect(dialog.get('[role="status"]').text()).toContain("불러오는 중");
+  await dialog.get('[aria-label="판본 이력 닫기"]').trigger("click");
+  complete({ data: [], meta: { page: 1, total_pages: 0 } });
+  await flushPromises();
+  expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+  wrapper.unmount();
+});
+it("판본 조회 실패는 팝업 안에 원인과 다시 시도 버튼을 표시한다", async () => {
+  versions.mockRejectedValueOnce({
+    message: "판본 조회 실패",
+    retryable: true,
+  });
+  const wrapper = await openVersionHistory();
+  await flushPromises();
+  const dialog = wrapper.get('[role="dialog"]');
+  expect(dialog.text()).toContain("판본 조회 실패");
+  expect(dialog.text()).toContain("다시 시도");
   wrapper.unmount();
 });

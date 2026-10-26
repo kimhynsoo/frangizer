@@ -311,7 +311,7 @@ docker compose down -v     # 컨테이너와 볼륨(DB, FAISS 인덱스, 업로�
 
 - 문서는 backend 업로드·승인을 거쳐서만 RAG에 들어갑니다. `data/source/`, `data/staged/`(미배포 판본), `eval/`, `docs/`는 컨테이너에 연결하지 않으며 자동 적재하지 않습니다. 구조화 레시피(`data/structured/`)만 읽기 전용으로 연결됩니다.
 - 업로드 문서, FAISS 인덱스, 질의 결과(SQLite)는 `frangizer_data` 볼륨(`/var/lib/frangizer`)에 저장되며, backend가 저장한 문서를 rag가 같은 볼륨에서 읽어 색인합니다. 저장소에는 커밋하지 않습니다.
-- 웹 이미지는 실제 API에 연결되도록 `VITE_USE_MOCK=false`로 빌드됩니다. 프론트를 샘플 데이터로만 보려면 `frontend/`에서 개발 서버를 따로 실행합니다.
+- 웹 이미지는 실제 API에 연결되도록 `VITE_USE_MOCK=false`로 빌드됩니다. PC·모바일 화면은 `frontend/` 하나로 실행합니다. 합성 데이터만 확인하려면 `frontend/.env.local`에 `VITE_USE_MOCK=true`를 설정하고 개발 서버를 실행합니다.
 - backend 이미지는 저장소 루트를 빌드 컨텍스트로 써서 `docs/api` 계약(Swagger)을 함께 담습니다. Swagger UI는 외부에 공개하지 않으므로 개발용 실행(5단계)에서 확인합니다.
 - `.env`의 비밀번호를 바꾼 뒤에는 `docker compose down -v`로 DB를 초기화해야 반영됩니다. MariaDB는 처음 만들어질 때만 사용자를 만듭니다.
 - 80번 포트가 이미 쓰이고 있으면 `.env`의 `WEB_PORT`를 바꿉니다(예: `WEB_PORT=8088` → http://localhost:8088).

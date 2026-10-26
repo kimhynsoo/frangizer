@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { ArrowRight } from "@lucide/vue";
+import CafeArtwork from "../components/CafeArtwork.vue";
 import ConnectionMark from "../components/ConnectionMark.vue";
 import { useAuth } from "../stores/auth";
 import { isMock } from "../api/client";
@@ -67,20 +68,21 @@ async function submit() {
         ><span>프랜자이저<small>FRANGIZER WORKSPACE</small></span>
       </div>
       <div class="story-content">
-        <h1>가맹점주의 곁에서,<br />든든한 운영 파트너.</h1>
+        <h1>가맹점주의 곁에서, <br />든든한 운영 파트너</h1>
+        <CafeArtwork />
       </div>
     </section>
     <section class="login-form-side">
       <div class="login-form-wrap">
         <span class="eyebrow">WELCOME BACK</span>
         <h2>업무 공간에 로그인</h2>
-        <p class="muted">발급받은 계정으로 시작하세요.</p>
+        <p class="muted">발급받은 계정으로 시작하세요</p>
         <div class="demo-login">
           <p>
             {{
               isMock
                 ? "역할을 선택하면 시연 계정이 입력됩니다."
-                : "역할을 선택하면 테스트 계정 아이디가 입력됩니다. 비밀번호는 직접 입력하세요."
+                : "역할을 선택하면 테스트 계정 아이디가 입력됩니다. 비밀번호는 직접 입력하세요"
             }}
           </p>
           <div class="segmented">
@@ -123,7 +125,7 @@ async function submit() {
           </button>
         </form>
         <p class="login-help">
-          계정 발급 및 접근 권한은 본사 담당자에게 문의하세요.
+          계정 발급 및 접근 권한은 본사 담당자에게 문의하세요
           <br />본사 담당자 연락처: 010-XXXX-XXXX
         </p>
       </div>

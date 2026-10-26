@@ -51,6 +51,8 @@ export function browserListen({
   onLevel = () => {},
   onStopReady = () => {},
   maxSeconds = 60,
+  allowEmpty = false,
+  stopOnFinal = () => false,
 } = {}) {
   return new Promise((resolve, reject) => {
     const Recognition =
@@ -58,7 +60,7 @@ export function browserListen({
     if (!Recognition) {
       reject(
         new Error(
-          "이 브라우저는 실시간 음성 입력을 지원하지 않습니다. Chrome·Edge 등 지원 브라우저를 사용하거나 실제 STT 서버에 연결해 주세요.",
+          "이 브라우저는 실시간 음성 입력을 지원하지 않습니다. Chrome·Edge 등 지원 브라우저를 사용하거나 실제 STT 서버에 연결해 주세요",
         ),
       );
       return;
@@ -87,11 +89,11 @@ export function browserListen({
       settled = true;
       cleanup();
       if (error) reject(error);
-      else if (text.trim()) resolve(text.trim());
+      else if (text.trim() || allowEmpty) resolve(text.trim());
       else
         reject(
           new Error(
-            "말소리를 인식하지 못했습니다. 마이크 가까이에서 다시 말해 주세요.",
+            "말소리를 인식하지 못했습니다. 마이크 가까이에서 다시 말해 주세요",
           ),
         );
     };
@@ -108,23 +110,34 @@ export function browserListen({
         .join(" ");
       onPartial(text);
       onLevel(0.6);
+      if (
+        event.results[event.results.length - 1]?.isFinal &&
+        stopOnFinal(text)
+      ) {
+        recognition.stop();
+      }
     };
     recognition.onspeechend = () => recognition.stop();
-    recognition.onerror = (event) =>
+    recognition.onerror = (event) => {
+      if (allowEmpty && event.error === "no-speech") {
+        finish();
+        return;
+      }
       finish(
         new Error(
           {
             "not-allowed":
-              "마이크 권한이 필요합니다. 브라우저의 마이크 접근을 허용해 주세요.",
+              "마이크 권한이 필요합니다. 브라우저의 마이크 접근을 허용해 주세요",
             "audio-capture":
-              "마이크를 찾을 수 없습니다. 장치 연결을 확인해 주세요.",
+              "마이크를 찾을 수 없습니다. 장치 연결을 확인해 주세요",
             network:
-              "브라우저 음성 인식에 연결하지 못했습니다. 인터넷 연결을 확인하거나 서버 모드를 사용해 주세요.",
-            "no-speech": "말소리가 들리지 않았습니다. 다시 말해 주세요.",
+              "브라우저 음성 인식에 연결하지 못했습니다. 인터넷 연결을 확인하거나 서버 모드를 사용해 주세요",
+            "no-speech": "말소리가 들리지 않았습니다. 다시 말해 주세요",
             aborted: "음성 입력이 중단됐습니다.",
-          }[event.error] || "음성 인식에 실패했습니다. 다시 시도해 주세요.",
+          }[event.error] || "음성 인식에 실패했습니다. 다시 시도해 주세요",
         ),
       );
+    };
     recognition.onend = () => finish();
     if (signal?.aborted) {
       finish(abortError());
@@ -141,7 +154,7 @@ export function browserListen({
             recognition.abort();
           } finally {
             finish(
-              new Error("음성 인식 시간이 초과됐습니다. 다시 말해 주세요."),
+              new Error("음성 인식 시간이 초과됐습니다. 다시 말해 주세요"),
             );
           }
         },
@@ -176,8 +189,8 @@ export async function recordAudio({
   } catch (error) {
     throw new Error(
       error.name === "NotAllowedError"
-        ? "마이크 접근이 차단됐습니다. 브라우저 권한을 확인해 주세요."
-        : "마이크를 사용할 수 없습니다. 장치를 확인해 주세요.",
+        ? "마이크 접근이 차단됐습니다. 브라우저 권한을 확인해 주세요"
+        : "마이크를 사용할 수 없습니다. 장치를 확인해 주세요",
     );
   }
   if (signal?.aborted) {
@@ -232,12 +245,12 @@ export async function recordAudio({
       else if (!speech)
         reject(
           new Error(
-            "말소리를 확인하지 못했습니다. 소음이 적은 방향으로 마이크를 가까이하고 다시 말해 주세요.",
+            "말소리를 확인하지 못했습니다. 소음이 적은 방향으로 마이크를 가까이하고 다시 말해 주세요",
           ),
         );
       else if (!blob?.size) reject(new Error("녹음된 음성이 없습니다."));
       else if (blob.size > 10 * 1024 * 1024)
-        reject(new Error("음성이 10MB를 초과했습니다. 짧게 다시 말해 주세요."));
+        reject(new Error("음성이 10MB를 초과했습니다. 짧게 다시 말해 주세요"));
       else resolve(blob);
     };
     const stop = () => {
@@ -321,43 +334,83 @@ export async function recordAudio({
     }
   });
 }
-export function speakLocally(text, { signal } = {}) {
-  const voice = globalThis.speechSynthesis
-    ?.getVoices()
-    .find((v) => v.localService && v.lang.startsWith("ko"));
-  if (!voice || !globalThis.SpeechSynthesisUtterance)
-    return Promise.resolve(false);
+export function preferredKoreanVoice(voices) {
+  const score = (voice) =>
+    /premium|프리미엄/i.test(voice.name)
+      ? 30
+      : /enhanced|고품질|natural|자연/i.test(voice.name)
+        ? 20
+        : voice.default
+          ? 10
+          : 0;
+  return voices
+    .filter((voice) => voice.localService && /^ko(?:[-_]|$)/i.test(voice.lang))
+    .sort((a, b) => score(b) - score(a))[0];
+}
+async function loadedVoice(synthesis, signal) {
+  const existing = preferredKoreanVoice(synthesis.getVoices());
+  if (existing || signal?.aborted) return existing;
+  return new Promise((resolve) => {
+    let timer;
+    const finish = () => {
+      clearTimeout(timer);
+      synthesis.removeEventListener?.("voiceschanged", changed);
+      signal?.removeEventListener("abort", finish);
+      resolve(
+        signal?.aborted ? null : preferredKoreanVoice(synthesis.getVoices()),
+      );
+    };
+    const changed = () => {
+      if (preferredKoreanVoice(synthesis.getVoices())) finish();
+    };
+    synthesis.addEventListener?.("voiceschanged", changed);
+    signal?.addEventListener("abort", finish, { once: true });
+    timer = setTimeout(finish, 1000);
+    if (signal?.aborted) finish();
+  });
+}
+export async function speakLocally(text, { signal } = {}) {
+  const synthesis = globalThis.speechSynthesis;
+  if (!synthesis || !globalThis.SpeechSynthesisUtterance || signal?.aborted)
+    return false;
+  const voice = await loadedVoice(synthesis, signal);
+  if (!voice || signal?.aborted) return false;
   return new Promise((resolve) => {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.voice = voice;
     utterance.lang = "ko-KR";
-    utterance.rate = 1.05;
+    utterance.rate = 1;
+    utterance.pitch = 1;
     let done = false;
-    const finish = () => {
+    const finish = (ok = true) => {
       if (done) return;
       done = true;
       clearTimeout(timeout);
       signal?.removeEventListener("abort", abort);
-      resolve(true);
+      resolve(ok);
     };
     const abort = () => {
-      speechSynthesis.cancel();
-      finish();
+      synthesis.cancel();
+      finish(false);
     };
-    utterance.onend = finish;
-    utterance.onerror = finish;
+    utterance.onend = () => finish(true);
+    utterance.onerror = () => finish(false);
     const timeout = setTimeout(
       () => {
-        speechSynthesis.cancel();
-        finish();
+        synthesis.cancel();
+        finish(false);
       },
       Math.max(5000, text.length * 300),
     );
     if (signal?.aborted) {
-      finish();
+      finish(false);
       return;
     }
     signal?.addEventListener("abort", abort, { once: true });
-    speechSynthesis.speak(utterance);
+    try {
+      synthesis.speak(utterance);
+    } catch {
+      finish(false);
+    }
   });
 }

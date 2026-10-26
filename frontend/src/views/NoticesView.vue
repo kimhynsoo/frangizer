@@ -174,8 +174,8 @@ onMounted(async () => {
     <div class="page-heading">
       <div>
         <span class="eyebrow">UPDATES & NOTICES</span>
-        <h1>바뀐 기준, 놓치지 않도록.</h1>
-        <p>운영 문서의 변경 내용과 적용일을 확인하세요.</p>
+        <h1>바뀐 기준, 놓치지 않도록</h1>
+        <p>운영 문서의 변경 내용과 적용일을 확인하세요</p>
       </div>
       <button
         v-if="auth.user.role === 'hq' && auth.can('document:publish')"
@@ -217,12 +217,23 @@ onMounted(async () => {
       >
     </div>
     <p v-if="busy" role="status" class="loading-line">공지를 불러오는 중…</p>
-    <article v-for="row in rows" :key="row.notice_id" class="notice-card">
+    <article
+      v-for="row in rows"
+      :key="row.notice_id"
+      class="notice-card"
+      :class="{
+        'notice-unacknowledged':
+          auth.user.role === 'owner' && !row.acknowledged_at,
+        'notice-acknowledged':
+          auth.user.role === 'owner' && !!row.acknowledged_at,
+      }"
+    >
       <div class="notice-card-top">
         <div>
-          <span v-if="!row.acknowledged_at" class="badge needs_review">{{
-            auth.user.role === "owner" ? "미확인" : "변경 안내"
-          }}</span
+          <span v-if="!row.acknowledged_at" class="badge needs_review"
+            ><Bell v-if="auth.user.role === 'owner'" :size="12" />{{
+              auth.user.role === "owner" ? "미확인" : "변경 안내"
+            }}</span
           ><span v-else class="badge answered"
             ><Check :size="12" />확인 완료</span
           ><small
@@ -253,10 +264,12 @@ onMounted(async () => {
       </div>
       <div class="notice-actions">
         <button class="button small ghost" @click="openDocument(row)">
-          문서 확인<ArrowUpRight :size="14" /></button
+          {{ row.acknowledged_at ? "문서 다시 보기" : "문서 확인"
+          }}<ArrowUpRight :size="14" /></button
         ><button
           v-if="auth.user.role === 'owner'"
-          class="button small"
+          class="button small notice-ack-button"
+          :class="{ 'is-complete': !!row.acknowledged_at }"
           :disabled="
             !!row.acknowledged_at ||
             ackBusy === row.notice_id ||
@@ -264,12 +277,15 @@ onMounted(async () => {
           "
           @click="ack(row)"
         >
+          <Check v-if="row.acknowledged_at" :size="16" />
           {{
             row.acknowledged_at
               ? "확인 완료"
               : ackBusy === row.notice_id
                 ? "저장 중…"
-                : "확인 완료"
+                : readNotices.has(readKey(row))
+                  ? "확인 완료하기"
+                  : "문서 확인 필요"
           }}</button
         ><button
           v-if="auth.can('analytics:read')"
@@ -287,15 +303,15 @@ onMounted(async () => {
           incompleteOnly
             ? "미확인 점포가 있는 공지가 없습니다."
             : unread
-              ? "모든 공지를 확인했어요."
+              ? "모든 공지를 확인했어요"
               : "등록된 공지가 없습니다."
         }}
       </h2>
       <p>
         {{
           incompleteOnly
-            ? "전체 공지를 보려면 체크를 해제하세요."
-            : "새로운 변경사항이 생기면 이곳에서 확인할 수 있어요."
+            ? "전체 공지를 보려면 체크를 해제하세요"
+            : "새로운 변경사항이 생기면 이곳에서 확인할 수 있어요"
         }}
       </p>
     </div>
@@ -387,7 +403,7 @@ onMounted(async () => {
               >
             </div>
             <div class="table-scroll">
-              <table>
+              <table class="notice-target-table">
                 <thead>
                   <tr>
                     <th>점포</th>
@@ -397,15 +413,15 @@ onMounted(async () => {
                 </thead>
                 <tbody>
                   <tr v-for="item in targets" :key="item.store_id">
-                    <td>{{ item.store_name }}</td>
-                    <td>
+                    <td data-label="점포">{{ item.store_name }}</td>
+                    <td data-label="지역 코드">
                       {{
                         regions.find(
                           (region) => region.code === item.region_code,
                         )?.name || item.region_code
                       }}
                     </td>
-                    <td>
+                    <td data-label="확인 시각">
                       {{
                         item.acknowledged_at
                           ? new Date(item.acknowledged_at).toLocaleString(

@@ -56,6 +56,18 @@ async function scrollTo(top) {
     value: 1500,
     configurable: true,
   });
+  panel.element.getBoundingClientRect = () => ({
+    top: 0,
+    bottom: 500,
+    height: 500,
+  });
+  const end = wrapper.find(".source-read-end");
+  if (end.exists())
+    end.element.getBoundingClientRect = () => ({
+      top: 1000 - panel.element.scrollTop,
+      bottom: 1000 - panel.element.scrollTop,
+      height: 1,
+    });
   panel.element.scrollTop = top;
   await panel.trigger("scroll");
 }
@@ -119,4 +131,35 @@ it("다른 문서로 바꾸면 확인 상태가 초기화된다", async () => {
   });
   await flushPromises();
   expect(confirmButton().attributes("disabled")).toBeDefined();
+});
+
+it("본문 끝을 읽으면 아래 출처·다운로드 영역까지 반복해서 내리지 않아도 읽음으로 기록한다", async () => {
+  await open();
+  await scrollTo(400);
+  expect(confirmButton().attributes("disabled")).toBeDefined();
+  await scrollTo(500);
+  // 본문 끝은 보이지만 전체 패널 끝(scrollTop 1000)은 아직 아니다.
+  expect(confirmButton().attributes("disabled")).toBeUndefined();
+});
+it("읽지 않은 페이지를 표시하고 바로 이동할 수 있다", async () => {
+  detail.mockImplementation(async (_doc, _version, { page }) =>
+    fixture(page, 2),
+  );
+  await open();
+  await wrapper
+    .findAll("button")
+    .find((b) => b.text() === "다음")
+    .trigger("click");
+  await flushPromises();
+  await scrollTo(1000);
+  expect(wrapper.get(".unread-page-list").text()).toBe("미확인 페이지 · 1");
+  await wrapper
+    .findAll("button")
+    .find((b) => b.text() === "미확인 페이지로 이동")
+    .trigger("click");
+  await flushPromises();
+  expect(detail.mock.calls.at(-1)[2].page).toBe(1);
+  expect(confirmButton().attributes("disabled")).toBeDefined();
+  await scrollTo(1000);
+  expect(confirmButton().attributes("disabled")).toBeUndefined();
 });

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
+import { createPinia } from "pinia";
 const m = vi.hoisted(() => ({
   speak: vi.fn(),
   ask: vi.fn(),
@@ -50,7 +51,7 @@ beforeEach(() => {
 });
 afterEach(() => wrapper?.unmount());
 async function send(auto) {
-  wrapper = mount(AskView);
+  wrapper = mount(AskView, { global: { plugins: [createPinia()] } });
   if (auto) await button("답변 자동 읽기 꺼짐").trigger("click");
   await wrapper.get("textarea").setValue("가맹 준비 질문");
   await wrapper.get("form").trigger("submit");

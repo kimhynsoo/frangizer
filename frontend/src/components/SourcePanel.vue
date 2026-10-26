@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, nextTick, watch, onUnmounted } from "vue";
+import { Check } from "@lucide/vue";
 import * as api from "../api/documents";
 import { isMock } from "../api/client";
 import ErrorNotice from "./ErrorNotice.vue";
@@ -15,6 +16,8 @@ const data = ref(null),
   busy = ref(false),
   page = ref(1),
   panel = ref(null),
+  documentBody = ref(null),
+  readEnd = ref(null),
   readPages = ref(new Set());
 const readComplete = computed(() => {
   const total = data.value?.sections_meta?.total_pages;
@@ -27,6 +30,12 @@ const readComplete = computed(() => {
     )
   );
 });
+const unreadPages = computed(() =>
+  Array.from(
+    { length: data.value?.sections_meta?.total_pages || 0 },
+    (_, i) => i + 1,
+  ).filter((p) => !readPages.value.has(p)),
+);
 function checkReadEnd() {
   const el = panel.value;
   if (
@@ -38,7 +47,15 @@ function checkReadEnd() {
     el.clientHeight <= 0
   )
     return;
-  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 4)
+  const end = readEnd.value;
+  if (!end) return;
+  const viewport = el.getBoundingClientRect();
+  const boundary = end.getBoundingClientRect();
+  if (
+    viewport.height > 0 &&
+    boundary.height > 0 &&
+    boundary.bottom <= viewport.bottom + 4
+  )
     readPages.value.add(page.value);
 }
 watch(readComplete, (complete) => {
@@ -54,8 +71,10 @@ const originalUrl = (value) => {
 };
 const formatTime = (value) =>
   new Date(value).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
-let generation = 0;
+let generation = 0,
+  resizeObserver = null;
 async function load(next = 1) {
+  checkReadEnd();
   const current = ++generation;
   page.value = next;
   busy.value = true;
@@ -75,6 +94,12 @@ async function load(next = 1) {
       await nextTick();
       if (current === generation && panel.value) {
         panel.value.scrollTop = 0;
+        resizeObserver?.disconnect();
+        if (props.requireRead && typeof ResizeObserver !== "undefined") {
+          resizeObserver = new ResizeObserver(checkReadEnd);
+          resizeObserver.observe(panel.value);
+          if (documentBody.value) resizeObserver.observe(documentBody.value);
+        }
         checkReadEnd();
       }
     }
@@ -92,6 +117,7 @@ async function download() {
 }
 onUnmounted(() => {
   generation++;
+  resizeObserver?.disconnect();
 });
 watch(
   () => props.source,
@@ -127,6 +153,24 @@ watch(
         </button>
       </div>
       <h2 id="source-title">{{ source.title || "출처 상세" }}</h2>
+      <div
+        v-if="source.acknowledged_at"
+        class="notice-confirmed-banner"
+        role="status"
+      >
+        <Check :size="18" />
+        <div>
+          <strong>확인 완료한 문서입니다.</strong
+          ><small
+            >{{
+              new Date(source.acknowledged_at).toLocaleString("ko-KR", {
+                timeZone: "Asia/Seoul",
+              })
+            }}
+            확인</small
+          >
+        </div>
+      </div>
       <p v-if="requireRead" class="info-banner">
         문서의 모든 페이지를 끝까지 내려 확인하면 확인 완료 버튼이 활성화됩니다.
       </p>
@@ -168,7 +212,7 @@ watch(
           {{
             data.version.indexing_policy.legal_temporal_reviewed
               ? "법령 시행 시점 검수 기록이 있습니다."
-              : "법령 시행 시점 미검수 · 조문별 시행일과 경과규정을 확인해 주세요."
+              : "법령 시행 시점 미검수 · 조문별 시행일과 경과규정을 확인해 주세요"
           }}
         </p>
         <p v-if="data.version.page_count" class="muted">
@@ -184,30 +228,33 @@ watch(
           }}
           (해당 시각 미포함)
         </p>
-        <h3>문서 근거</h3>
-        <article
-          v-for="section in data.sections"
-          :key="section.chunk_id"
-          class="source-excerpt"
-        >
-          <small
-            >{{ section.page ? `PDF ${section.page}쪽` : "" }}
-            {{ section.article }} · {{ section.heading }}</small
+        <div ref="documentBody" class="source-document-body">
+          <h3>문서 근거</h3>
+          <article
+            v-for="section in data.sections"
+            :key="section.chunk_id"
+            class="source-excerpt"
           >
-          <p class="muted">
-            조문·본문 적용 기간 (한국 시각):
-            {{ formatTime(section.effective_from) }}부터
-            <template v-if="section.effective_until"
-              >{{ formatTime(section.effective_until) }} 전까지 (종료 시각
-              미포함)</template
+            <small
+              >{{ section.page ? `PDF ${section.page}쪽` : "" }}
+              {{ section.article }} · {{ section.heading }}</small
             >
-            <template v-else> · 종료일 지정 없음</template>
+            <p class="muted">
+              조문·본문 적용 기간 (한국 시각):
+              {{ formatTime(section.effective_from) }}부터
+              <template v-if="section.effective_until"
+                >{{ formatTime(section.effective_until) }} 전까지 (종료 시각
+                미포함)</template
+              >
+              <template v-else> · 종료일 지정 없음</template>
+            </p>
+            <p>{{ section.text }}</p>
+          </article>
+          <p v-if="requireRead && !data.sections.length" class="info-banner">
+            확인할 문서 본문이 없어 확인을 완료할 수 없습니다.
           </p>
-          <p>{{ section.text }}</p>
-        </article>
-        <p v-if="requireRead && !data.sections.length" class="info-banner">
-          확인할 문서 본문이 없어 확인을 완료할 수 없습니다.
-        </p>
+          <div ref="readEnd" class="source-read-end" aria-hidden="true"></div>
+        </div>
         <PageNav :meta="data.sections_meta" :busy="busy" @change="load" />
         <h3>원천 출처</h3>
         <p>
@@ -219,33 +266,49 @@ watch(
           {{ data.version.original_source.acquired_on }}
         </p>
         <p>{{ data.version.original_source.note }}</p>
-        <a
-          v-if="originalUrl(data.version.original_source.url)"
-          :href="originalUrl(data.version.original_source.url)"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="button secondary small"
-          >공식 원문 출처 열기</a
-        >
-        <p v-else class="muted">
-          등록된 원문 URL이 없습니다. 출처 정보와 제공 파일을 확인해 주세요.
+        <p v-if="!originalUrl(data.version.original_source.url)" class="muted">
+          등록된 원문 URL이 없습니다. 출처 정보와 제공 파일을 확인해 주세요
         </p>
-        <button class="button secondary" @click="download">
-          파일 내려받기
-        </button>
+        <div class="source-file-actions">
+          <a
+            v-if="originalUrl(data.version.original_source.url)"
+            :href="originalUrl(data.version.original_source.url)"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="button secondary"
+            >공식 원문 출처 열기</a
+          >
+          <button type="button" class="button secondary" @click="download">
+            파일 내려받기
+          </button>
+        </div>
         <p v-if="isMock" class="muted">
           초기 시연 문서는 TXT 발췌를, 직접 업로드한 문서는 선택한 원본 파일을
           내려받습니다.
         </p></template
       >
       <div v-if="requireRead" class="document-read-confirm">
-        <p role="status">
-          {{
-            readComplete
-              ? "문서를 끝까지 확인했습니다."
-              : `전체 ${data?.sections_meta?.total_pages || 0}페이지 중 ${readPages.size}페이지 확인`
-          }}
-        </p>
+        <div class="document-read-progress">
+          <p role="status">
+            {{
+              readComplete
+                ? "문서를 끝까지 확인했습니다."
+                : `전체 ${data?.sections_meta?.total_pages || 0}페이지 중 ${readPages.size}페이지 확인`
+            }}
+          </p>
+          <template v-if="!busy && !error && unreadPages.length">
+            <p class="unread-page-list">
+              미확인 페이지 · {{ unreadPages.join(", ") }}
+            </p>
+            <button
+              type="button"
+              class="button secondary small"
+              @click="load(unreadPages[0])"
+            >
+              미확인 페이지로 이동
+            </button>
+          </template>
+        </div>
         <button
           class="button"
           :disabled="!readComplete || confirmBusy"

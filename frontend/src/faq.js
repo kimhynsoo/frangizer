@@ -1,6 +1,6 @@
 // Fixed FAQ copy. Replace each placeholder only after its answer is verified.
 const unavailableAnswer =
-  "해당 기준 시점에 유효한 자료로는 답을 확인할 수 없습니다. 본사 담당자에게 문의해 주세요.";
+  "해당 기준 시점에 유효한 자료로는 답을 확인할 수 없습니다. 본사 담당자에게 문의해 주세요";
 export const faqItems = [
   {
     id: "getting-started",
