@@ -59,9 +59,12 @@ it("호출 → 안내 → 질문 → API → 읽기 중 호출어를 듣고 완�
   await vi.advanceTimersByTimeAsync(0);
   expect(ask).toHaveBeenCalledWith("바닐라라테 시럽 몇 펌프야");
   expect(speak.mock.calls.map(([text]) => text)).toEqual([
-    "네, 말씀하세요",
+    "네",
     "시럽 두 펌프예요.",
   ]);
+  expect(listen.mock.calls[1][0].stopOnFinal("바닐라라테 시럽 몇 펌프야")).toBe(
+    true,
+  );
   expect(state.mock.calls.map(([s]) => s)).toEqual([
     "off",
     "waiting",
@@ -137,16 +140,75 @@ it("예비 점주의 답변은 읽지 않는다", async () => {
   const { session, speak } = setup({ allowReadAloud: false });
   const running = session.start();
   await vi.advanceTimersByTimeAsync(0);
-  expect(speak.mock.calls.map(([text]) => text)).toEqual(["네, 말씀하세요"]);
+  expect(speak.mock.calls.map(([text]) => text)).toEqual(["네"]);
   session.stop();
   await running;
 });
-it("인식 오류는 재시도 폭주 없이 종료한다", async () => {
+it("인식 오류도 자동으로 끄지 않고 재연결을 기다리며 요청을 반복하지 않는다", async () => {
+  vi.useFakeTimers();
   const onError = vi.fn(),
-    listen = vi.fn().mockRejectedValue(new Error("마이크 권한이 필요합니다."));
+    listen = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("마이크 권한이 필요합니다."))
+      .mockImplementation(pendingListen);
   const { session, state } = setup({ listen, onError });
-  await session.start();
+  const running = session.start();
+  await vi.advanceTimersByTimeAsync(0);
   expect(listen).toHaveBeenCalledOnce();
-  expect(onError).toHaveBeenCalledWith("마이크 권한이 필요합니다.");
+  expect(state).toHaveBeenLastCalledWith("paused");
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(listen).toHaveBeenCalledOnce();
+  session.retry();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(state).toHaveBeenLastCalledWith("waiting");
+  expect(listen).toHaveBeenCalledTimes(2);
+  session.stop();
+  await running;
   expect(state).toHaveBeenLastCalledWith("off");
+});
+it.each([
+  undefined,
+  {
+    status: "needs_review",
+    answer: "자료에서 답을 확인하지 못했습니다.",
+    steps: [],
+  },
+])(
+  "답변이 없거나 근거 부족이어도 다시 호출어를 기다린다: %j",
+  async (result) => {
+    vi.useFakeTimers();
+    const ask = vi.fn().mockResolvedValue(result);
+    const { session, state } = setup({ ask });
+    const running = session.start();
+    await vi.advanceTimersByTimeAsync(350);
+    expect(state).toHaveBeenLastCalledWith("waiting");
+    expect(ask).toHaveBeenCalledOnce();
+    expect(state.mock.calls.filter(([value]) => value === "off")).toHaveLength(
+      1,
+    );
+    session.stop();
+    await running;
+  },
+);
+it("답변 API 오류 후에도 다시 호출하면 새 질문을 처리한다", async () => {
+  vi.useFakeTimers();
+  const ask = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("502"))
+    .mockResolvedValueOnce({ answer: "두 펌프입니다." });
+  const listen = vi
+    .fn()
+    .mockResolvedValueOnce("시리 첫 질문")
+    .mockResolvedValueOnce("시리 다음 질문")
+    .mockImplementation(pendingListen);
+  const { session, state } = setup({ ask, listen });
+  const running = session.start();
+  await vi.advanceTimersByTimeAsync(700);
+  expect(ask.mock.calls.map(([question]) => question)).toEqual([
+    "첫 질문",
+    "다음 질문",
+  ]);
+  expect(state).toHaveBeenLastCalledWith("waiting");
+  session.stop();
+  await running;
 });

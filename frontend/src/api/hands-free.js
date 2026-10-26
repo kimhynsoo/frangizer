@@ -105,7 +105,29 @@ export function createHandsFree({
   listen = browserListen,
   speak = speakLocally,
 }) {
-  let controller = null;
+  let controller = null,
+    retryRequest = null;
+  function retry() {
+    retryRequest?.();
+  }
+  function waitForRetry(signal) {
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        signal.removeEventListener("abort", abort);
+        retryRequest = null;
+      };
+      const abort = () => {
+        cleanup();
+        reject(aborted());
+      };
+      retryRequest = () => {
+        cleanup();
+        resolve();
+      };
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) abort();
+    });
+  }
   function stop() {
     controller?.abort();
     controller = null;
@@ -123,76 +145,109 @@ export function createHandsFree({
     let queuedWake = null;
     try {
       while (!signal.aborted) {
-        onPartial("");
-        onState("waiting");
-        const heard =
-          queuedWake ??
-          (await listen({
-            signal,
-            maxSeconds: 30,
-            allowEmpty: true,
-            onPartial: (text) => {
-              if (!signal.aborted) onHeard(text);
-            },
-            stopOnFinal: (text) => wakeQuestion(text, getAliases()) !== null,
-          }));
-        queuedWake = null;
-        check();
-        if (heard) onHeard(heard);
-        let question = wakeQuestion(heard, getAliases());
-        if (question === null) {
-          await pause(signal);
-          continue;
-        }
-        if (!question) {
-          onState("prompting");
-          await speak("네, 말씀하세요", { signal });
-          check();
-          onState("question");
-          question = (
-            await listen({
+        try {
+          onPartial("");
+          onState("waiting");
+          const heard =
+            queuedWake ??
+            (await listen({
               signal,
-              maxSeconds: 60,
+              maxSeconds: 30,
               allowEmpty: true,
-              onPartial,
-            })
-          ).trim();
+              onPartial: (text) => {
+                if (!signal.aborted) onHeard(text);
+              },
+              stopOnFinal: (text) => wakeQuestion(text, getAliases()) !== null,
+            }));
+          queuedWake = null;
+          check();
+          if (heard) onHeard(heard);
+          let question = wakeQuestion(heard, getAliases());
+          if (question === null) {
+            await pause(signal);
+            continue;
+          }
+          if (!question) {
+            onState("prompting");
+            await speak("네", { signal });
+            check();
+            onState("question");
+            question = (
+              await listen({
+                signal,
+                maxSeconds: 60,
+                allowEmpty: true,
+                onPartial,
+                // Browser speech recognition can keep the session open for a
+                // few seconds after it already produced the final sentence.
+                // The question is complete at that point, so submit it now.
+                stopOnFinal: () => true,
+              })
+            ).trim();
+            check();
+          }
+          if (!question || cancelQuestion(question)) {
+            await pause(signal);
+            continue;
+          }
+          if (question.length > 2000) {
+            onNotice(
+              "질문이 너무 깁니다. 호출어를 부르고 짧게 다시 질문해 주세요",
+            );
+            await pause(signal);
+            continue;
+          }
+          onPartial(question);
+          onState("thinking");
+          let result;
+          try {
+            result = await ask(question);
+          } catch {
+            /* The chat view keeps the failed request and its retry control. */
+          }
+          check();
+          if (!result) {
+            onNotice(
+              "답변을 가져오지 못했어요. 음성 대기는 유지합니다. 호출어를 부르고 다시 질문해 주세요",
+            );
+            await pause(signal);
+            continue;
+          }
+          if (allowReadAloud && result.answer) {
+            onState("speaking");
+            let playback;
+            try {
+              playback = await speakWithWakeInterrupt(
+                spokenAnswer(result, question),
+                { signal, listen, speak, getAliases },
+              );
+            } catch {
+              check();
+              onNotice(
+                "답변을 읽지 못했지만 음성 대기는 유지합니다. 화면의 답변을 확인해 주세요",
+              );
+              await pause(signal);
+              continue;
+            }
+            if (playback.heard !== null) queuedWake = playback.heard;
+            check();
+            if (playback.monitorUnavailable)
+              onNotice(
+                "이 브라우저에서 읽는 중 호출어 인식이 중단됐어요. 이번 답변은 대기 끄기 버튼으로 멈출 수 있어요",
+              );
+            if (!playback.ok)
+              onNotice(
+                "기기에 한국어 읽기 음성이 없어 답변은 화면으로 표시합니다.",
+              );
+          }
+          if (queuedWake === null) await pause(signal);
+        } catch (error) {
+          if (signal.aborted) break;
+          onError(error.message || "음성 인식 연결을 확인해 주세요");
+          onState("paused");
+          await waitForRetry(signal);
           check();
         }
-        if (!question || cancelQuestion(question)) {
-          await pause(signal);
-          continue;
-        }
-        if (question.length > 2000)
-          throw new Error(
-            "질문이 너무 깁니다. 음성 대기를 다시 켜고 짧게 질문해 주세요",
-          );
-        onPartial(question);
-        onState("thinking");
-        const result = await ask(question);
-        check();
-        if (!result)
-          throw new Error(
-            "답변을 가져오지 못해 음성 대기를 껐습니다. 화면의 오류를 확인해 주세요",
-          );
-        if (allowReadAloud && result.answer) {
-          onState("speaking");
-          const playback = await speakWithWakeInterrupt(
-            spokenAnswer(result, question),
-            { signal, listen, speak, getAliases },
-          );
-          if (playback.heard !== null) queuedWake = playback.heard;
-          check();
-          if (playback.monitorUnavailable)
-            onNotice(
-              "이 브라우저에서 읽는 중 호출어 인식이 중단됐어요. 이번 답변은 대기 끄기 버튼으로 멈출 수 있어요",
-            );
-          if (!playback.ok)
-            onNotice(
-              "기기에 한국어 읽기 음성이 없어 답변은 화면으로 표시합니다.",
-            );
-        }
-        if (queuedWake === null) await pause(signal);
       }
     } catch (error) {
       if (!signal.aborted)
@@ -202,5 +257,5 @@ export function createHandsFree({
       if (controller === session) stop();
     }
   }
-  return { start, stop };
+  return { start, stop, retry };
 }

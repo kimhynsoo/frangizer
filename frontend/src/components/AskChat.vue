@@ -374,16 +374,6 @@ onUnmounted(() => {
       <div ref="bottom"></div>
     </div>
     <div class="chat-composer">
-      <HandsFreeVoice
-        ref="handsFreeControl"
-        :profile-key="`${isMock ? 'demo' : 'live'}:${userId}`"
-        :ask="(text) => submitQuestion({ text, readAnswer: false })"
-        :active="active"
-        :disabled="busy || loading || voiceActive || readingAnswer"
-        :allow-read-aloud="auth.user.role !== 'prospect'"
-        @enabled="handsFreeEnabled = $event"
-        @listening="setVoiceActive"
-      />
       <VoiceInput
         :input-id="`question-input-${tabId}`"
         v-model="question"
@@ -395,7 +385,51 @@ onUnmounted(() => {
         @confirmed="submitQuestion"
         @read-preference="setReadPreference"
         @update:model-value="saveDraft"
-      />
+      >
+        <template #hands-free>
+          <HandsFreeVoice
+            ref="handsFreeControl"
+            compact
+            :profile-key="`${isMock ? 'demo' : 'live'}:${userId}`"
+            :ask="(text) => submitQuestion({ text, readAnswer: false })"
+            :active="active"
+            :disabled="busy || loading || voiceActive || readingAnswer"
+            :allow-read-aloud="auth.user.role !== 'prospect'"
+            @enabled="handsFreeEnabled = $event"
+            @listening="setVoiceActive"
+          />
+        </template>
+        <template #voice-settings>
+          <div class="composer-wake-settings">
+            <template v-if="handsFreeControl?.supported">
+              <button
+                type="button"
+                class="button ghost small"
+                :disabled="!handsFreeControl?.canRegister"
+                @click="handsFreeControl?.openEnrollment()"
+              >
+                {{
+                  handsFreeControl?.registrationCount
+                    ? "내 발음 재등록"
+                    : "내 발음 등록"
+                }}
+              </button>
+              <span v-if="handsFreeControl?.registrationCount" class="muted"
+                >내 발음 {{ handsFreeControl.registrationCount }}개 등록됨</span
+              >
+              <p class="voice-engine-note">
+                음성 대기를 켜고 “시리”라고 부른 뒤 질문하세요. 말이 끝나면 자동
+                전송합니다. 대기 중 음성은 브라우저 제공 인식 서비스에서
+                처리하며 화면을 벗어나면 꺼집니다.
+              </p>
+            </template>
+            <p v-else class="voice-engine-note">
+              음성 대기는 HTTPS 또는 localhost의 음성 인식 지원 브라우저에서
+              사용할 수 있습니다.
+            </p>
+          </div>
+        </template>
+      </VoiceInput>
       <p class="composer-note">
         개인정보 입력을 피하고, 답변의 출처와 적용일을 확인한 뒤 필요한 결정은
         담당자와 확정하세요

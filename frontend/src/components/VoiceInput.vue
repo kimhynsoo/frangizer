@@ -233,6 +233,7 @@ onUnmounted(() => {
     </div>
     <p v-if="error" class="error-notice" role="alert">{{ error }}</p>
     <div class="composer-footer">
+      <slot name="hands-free" />
       <div class="composer-options">
         <span><BookOpen :size="14" />문서 기반 답변</span>
       </div>
@@ -284,6 +285,7 @@ onUnmounted(() => {
     </div>
     <details class="voice-settings">
       <summary>음성 설정</summary>
+      <slot name="voice-settings" />
       <div class="voice-options">
         <label
           >인식 방식<select v-model="engine" :disabled="active || disabled">
