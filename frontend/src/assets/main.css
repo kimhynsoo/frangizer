@@ -1043,6 +1043,17 @@ td small {
   gap: 13px;
   align-items: center;
 }
+.document-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+.document-row-actions > .button {
+  flex-shrink: 0;
+  min-height: 40px;
+  justify-content: center;
+}
 .file-icon {
   width: 35px;
   height: 40px;
