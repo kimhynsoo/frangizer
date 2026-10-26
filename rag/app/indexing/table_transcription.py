@@ -161,8 +161,12 @@ def apply_reviews(pages, raw_pages, review):
             p.flags[p.flags.index("table_needs_review")] = "table_reviewed"
     def as_region(e, block):
         return TextRegion("table", block, table={
+            "schema": "reviewed-cells-v1",
             "reviewed": True, "engine": "table_transcriptions", "source": "data/structured/table_transcriptions.json",
             "title": _cell(e["title"])[0] if e.get("title") else None, "pages": e["pages"],
+            "unit": _cell(e["unit"])[0] if e.get("unit") else None,
+            "columns": [_cell(c)[0] for c in e["columns"]],
+            "rows": [[_cell(c)[0] if c is not None else None for c in row] for row in e["rows"]],
             "context_lines": [l for l in [_cell(e["title"])[0] if e.get("title") else None,
                                           _cell(e["unit"])[0] if e.get("unit") else None] if l]})
 

@@ -78,7 +78,10 @@ def test_real_artifact_retrieval_and_answer_warning(make_request, roots, embedde
     assert '[시행일 미검수]' in response.result.answer
     assert response.result.sources[0].version_id == job['version_id']
     read = asyncio.run(retriever.read_sections((cid,), context))
-    assert [item.metadata.chunk_id for item in read.items] == [cid]
+    assert cid in [item.metadata.chunk_id for item in read.items]
+    from app.retrieval.base import context_related
+    anchor = next(e for e in batch.items if e.metadata.chunk_id == cid)
+    assert all(context_related(anchor, e) for e in read.items)
 
 
 def test_retrieval_filters_role_brand_and_period_before_embedding(make_request, roots, embedder):

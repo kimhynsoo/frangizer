@@ -98,6 +98,8 @@ def test_index_job_uses_review_and_revision_tracks_it(make_request, roots, embed
     tables = [r for r in recs if ".table" in r["metadata"]["section_key"]]
     assert tables and all(REVIEW_MARK in r["text"] for r in tables)
     assert all(r["table"]["engine"] == "table_transcriptions" and r["table"]["reviewed"] for r in tables)
+    assert all(r['table']['schema'] == 'reviewed-cells-v1' and r['table']['columns']
+               and r['table']['rows'] and 'unit' in r['table'] for r in tables)
     t20 = next(r for r in tables if r["metadata"]["page"] == 20 and "16,720" in r["text"])
     assert "(단위: 천원, 부가세 포함)" in t20["text"] and "금액 41,665" in t20["text"]
     assert any(".prose" in r["metadata"]["section_key"] for r in recs)

@@ -27,9 +27,13 @@ REPO = Path(__file__).resolve().parents[2]
 
 class NoModel:
     name = 'offline-model-disabled'
-    async def decide(self, messages):
+    async def plan(self, messages):
+        raise AssertionError('No model calls allowed')
+    async def assess(self, messages):
         raise AssertionError('This scenario must use structured recipe data')
     async def finalize(self, messages):
+        raise AssertionError('No model calls allowed')
+    async def verify(self, messages):
         raise AssertionError('No model calls allowed')
 
 

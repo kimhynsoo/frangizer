@@ -152,7 +152,7 @@ def separate_table_regions(pg, lines, boxes):
     return [TextRegion('prose' if i == 0 else 'table', group) for i, group in enumerate(groups) if group]
 
 
-def extract_pdf(path, pages=None, *, parse_tables=True):
+def extract_pdf(path, pages=None, *, parse_tables=True, skip_table_pages=()):
     """pages: 처리할 PDF 쪽 번호 집합(1부터). None이면 전체."""
     try:
         doc = pymupdf.open(path)
@@ -195,7 +195,7 @@ def extract_pdf(path, pages=None, *, parse_tables=True):
     for p in out:
         if parse_tables and 'table_needs_review' in p.flags:
             p.regions = separate_table_regions(doc[p.page - 1], p.lines, table_boxes.get(p.page, []))
-            if p.regions:
+            if p.regions and p.page not in skip_table_pages:
                 from .tables import extract_local_tables, table_lines
                 source_sha = source_sha or hashlib.sha256(Path(path).read_bytes()).hexdigest()
                 table_regions = [r for r in p.regions if r.kind == 'table']

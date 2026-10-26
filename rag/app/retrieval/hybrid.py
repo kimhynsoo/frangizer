@@ -1,41 +1,68 @@
-"""Blend dense similarity with literal Korean term matches inside the permitted scope."""
+"""Korean morphological BM25 and rank fusion, over already-authorized rows only."""
 import math
 import re
+from collections import Counter
+from functools import lru_cache
+from threading import Lock
+
+TOKENIZER_LOCK = Lock()
+STOP_WORDS = frozenset({'것', '수', '등', '경우', '문서', '자료', '질문', '답변', '확인', '무엇'})
+
+
+@lru_cache(maxsize=1)
+def _tokenizer():
+    from kiwipiepy import Kiwi
+    return Kiwi(num_workers=1)
+
+
+@lru_cache(maxsize=8192)
+def text_terms(text):
+    with TOKENIZER_LOCK:
+        tokens = _tokenizer().tokenize(text.casefold())
+    terms = [t.form.casefold() for t in tokens
+             if t.tag in {'NNG', 'NNP', 'SL', 'SN', 'XR'} and t.form not in STOP_WORDS]
+    terms.extend(re.findall(r'제\d+조(?:의\d+)?|[a-z][a-z0-9_-]*(?:\.\d+)+', text.casefold()))
+    return tuple(terms)
 
 
 def query_terms(query):
-    terms = set()
-    for word in re.findall(r'[가-힣]+|[a-zA-Z][a-zA-Z0-9_-]+|\d+(?:[,.]\d+)*', query.casefold()):
-        if re.fullmatch(r'[가-힣]+', word):
-            # Particles and compound nouns make whitespace tokenization too brittle.
-            for width in range(3, min(6, len(word)) + 1):
-                terms.update(word[i:i+width] for i in range(len(word)-width+1))
-        else:
-            terms.add(word)
-    return sorted(terms)
+    return sorted(set(text_terms(query)))
 
 
-def rank_hybrid(query, items, dense_positions, dense_values):
-    """Caller MUST filter permissions/versions before supplying items and similarities."""
-    texts = [''.join((e.metadata.title + '\n' + e.text).casefold().split()) for e in items]
-    n = len(texts)
-    average = sum(map(len, texts)) / max(1, n)
-    lexical = [0.0] * n
+@lru_cache(maxsize=8192)
+def _frequencies(text):
+    return Counter(text_terms(text))
+
+
+def bm25_scores(query, items):
+    documents = [_frequencies(e.metadata.title + '\n' + e.search_text) for e in items]
+    lengths = [sum(d.values()) for d in documents]
+    n = len(items)
+    average = sum(lengths) / max(1, n)
+    scores = [0.0] * n
     for term in query_terms(query):
-        counts = [text.count(term) for text in texts]
+        counts = [d[term] for d in documents]
         df = sum(c > 0 for c in counts)
         if not df:
             continue
-        idf = math.log1p((n-df+0.5)/(df+0.5))
-        for i, count in enumerate(counts):
-            if count:
-                denominator = count + 1.2 * (0.25 + 0.75 * len(texts[i]) / max(1, average))
-                lexical[i] += idf * count * 2.2 / denominator
-    maximum = max(lexical, default=0)
-    if not maximum:
-        return list(dense_positions)
-    dense = {int(pos): float(value) for pos, value in zip(dense_positions, dense_values)}
-    def score(i):
-        cosine = max(-1.0, min(1.0, dense[i]))
-        return 0.65 * (cosine + 1) / 2 + 0.35 * lexical[i] / maximum
-    return sorted(range(n), key=lambda i: (score(i), dense[i]), reverse=True)
+        idf = math.log1p((n - df + 0.5) / (df + 0.5))
+        for i, tf in enumerate(counts):
+            if tf:
+                scores[i] += idf * tf * 2.2 / (tf + 1.2 * (0.25 + 0.75 * lengths[i] / max(1, average)))
+    return scores
+
+
+def reciprocal_rank_fusion(rankings, *, k=60):
+    scores = {}
+    for ranking in rankings:
+        for rank, pos in enumerate(dict.fromkeys(ranking), 1):
+            scores[pos] = scores.get(pos, 0.0) + 1 / (k + rank)
+    return sorted(scores, key=lambda pos: scores[pos], reverse=True)
+
+
+def rank_hybrid(query, items, dense_positions, dense_values, *, prefetch_k=30):
+    dense = [int(p) for p in dense_positions[:prefetch_k]]
+    lexical = bm25_scores(query, items)
+    keywords = sorted((i for i, score in enumerate(lexical) if score > 0),
+                      key=lambda i: lexical[i], reverse=True)[:prefetch_k]
+    return reciprocal_rank_fusion([dense, keywords]) if keywords else dense
