@@ -41,6 +41,10 @@ services:
       VOICE_URL: http://voice:8008   # /stt returns 503 while voice is down or still loading the model
       DOCUMENT_STORE_DIR: /var/lib/frangizer
       DEMO_PASSWORD: ${DEMO_PASSWORD:?.env에 DEMO_PASSWORD 값을 넣으세요}
+      # USD per 1M tokens for the request log cost_usd (defaults: gpt-5.4-mini). Change together with LLM_MODEL.
+      LLM_PRICE_INPUT_PER_1M: ${LLM_PRICE_INPUT_PER_1M:-0.75}
+      LLM_PRICE_OUTPUT_PER_1M: ${LLM_PRICE_OUTPUT_PER_1M:-4.50}
+      EMBEDDING_PRICE_PER_1M: ${EMBEDDING_PRICE_PER_1M:-0}
       # Same origin through nginx, so no CORS origins are needed in the deployed stack
       CORS_ALLOWED_ORIGINS: ""
     volumes:
