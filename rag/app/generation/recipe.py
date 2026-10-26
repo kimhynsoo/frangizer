@@ -118,6 +118,8 @@ def parse_request(question, data):
     # Only connectors, question particles and presentation verbs can remain.
     # Do not add substantive words here: unsupported requests must not disappear.
     filler = ('알려주세요', '알려줘', '알려줄래', '알려줘요', '보여줘', '보여주세요',
+              '어떻게 되니', '어떻게 되나요', '어떻게 됩니까', '어떻게 되죠',
+              '어떻게 돼', '어떻게 돼요',
               '넣어요', '넣어', '들어가요', '들어가', '필요해요', '필요해',
               '무엇인지', '확인',
               '어떻게', '예요', '이에요', '인가요', '이야', '뭐야', '뭔가요', '야',

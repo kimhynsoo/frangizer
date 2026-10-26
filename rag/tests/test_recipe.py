@@ -52,6 +52,17 @@ def test_catalog_intent(question):
     assert is_catalog_request(question)
 
 
+@pytest.mark.parametrize('ending', ['어떻게 되니', '어떻게 되나요', '어떻게 됩니까',
+                                  '어떻게 되죠', '어떻게 돼', '어떻게 돼요'])
+def test_presentation_endings_preserve_recipe_request_and_unknown_qualifiers(ending):
+    data = json.loads(STRUCTURED.read_text())
+    for menu in ('바닐라 라떼', '카페모카'):
+        request = parse_request(f'{menu} 레시피가 {ending}', data)
+        assert request is not None and request.asks == frozenset({'recipe'})
+        assert request.temperatures == ()
+    assert parse_request(f'바닐라 라떼 우유 대신 두유로 레시피가 {ending}', data) is None
+
+
 @pytest.mark.parametrize('question', ['판매 가능한 메뉴', '메뉴 목록에서 삭제해도 돼?',
     '레시피 목록과 교육비 알려줘', '아이스 바닐라라떼 레시피', '레시피 변경 가능한가요?'])
 def test_catalog_does_not_swallow_counsel_or_individual_lookup(question):
@@ -101,7 +112,8 @@ def test_approved_recipe_quantity_without_llm(recipes, version, date, expected):
 
 def test_temperature_reply_reuses_only_latest_request_and_current_sources(recipes):
     shortcut, jobs = recipes
-    for previous_question in ('바닐라라떼 레시피 알려줘', '아메리카노 레시피', '바닐라라떼 우유 얼마?'):
+    for previous_question in ('바닐라라떼 레시피 알려줘', '아메리카노 레시피', '바닐라라떼 우유 얼마?',
+                              '바닐라 라떼 레시피가 어떻게 되니'):
         original = context(jobs, previous_question)
         pending = asyncio.run(shortcut.try_answer(original)).result
         assert pending.follow_up_questions == ('HOT과 ICED 중 어느 레시피인가요?',)

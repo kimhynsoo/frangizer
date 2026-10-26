@@ -207,17 +207,47 @@ frangizer/
 
 ## 실행 방법
 
-> `backend/`, `rag/`, `frontend/`를 Docker Compose 한 번으로 실행합니다. 구현이 진행되면 이 절을 갱신합니다.
+> 처음 실행은 **저장소 받기 → `.env` 설정 → 컨테이너 기동 → 문서 등록·색인·배포 → 로그인·질문 확인** 순서입니다. 문서는 컨테이너 기동만으로 자동 등록되지 않습니다.
 
-**준비물:** Docker Desktop(Compose v2), `.env`에 넣을 값(JWT 서명키, 내부 토큰, LLM API 키, DB 비밀번호, 시연 계정 비밀번호)
+**준비물:** 실행 중인 Docker Desktop(Compose v2), Git, 호스트의 Python 3, 외부 모델 API 키와 사용 가능한 모델 설정. 시드·스모크 스크립트는 호스트의 `python3`를 사용합니다. 기본 Compose 실행에는 호스트의 Java·Node.js 설치나 Python 가상환경·별도 pip 설치가 필요하지 않습니다.
+
+저장소를 처음 받는 경우:
+
+```bash
+git clone https://github.com/kimhynsoo/frangizer.git
+cd frangizer
+```
+
+이미 받았다면 기존 `frangizer` 폴더에서 진행합니다. 아래 명령은 모두 `docker-compose.yml`이 있는 저장소 루트 기준입니다.
 
 ### 1. 환경변수 준비
 
 ```bash
-cp .env.example .env
+cp -n .env.example .env
 ```
 
-`.env`의 값은 직접 채우며 **커밋하지 않습니다.** 변수는 서비스마다 필요한 것이 다릅니다.
+기존 `.env`가 있으면 유지합니다. `.env`의 값은 직접 채우며 **커밋하지 않습니다.** 첫 질문까지 진행하려면 최소한 아래 값을 채웁니다. 모델 ID는 API 키가 아니라 모델 이름입니다.
+
+```dotenv
+JWT_SECRET=직접_생성한_32바이트_이상의_서명키
+INTERNAL_TOKEN=직접_생성한_내부통신용_비밀값
+DB_PASSWORD=직접_정한_DB_비밀번호
+DEMO_PASSWORD=직접_정한_시연계정_비밀번호
+LLM_API_KEY=본인의_API_키
+LLM_MODEL=gpt-5.4-mini
+EMBEDDING_MODEL=text-embedding-3-small
+```
+
+위 모델명은 현재 팀 시연 설정의 예입니다. 해당 키에서 모델 사용이 가능한지 확인합니다. `JWT_ISSUER=frangizer`, `JWT_AUDIENCE=frangizer-api` 등 나머지는 `.env.example` 기본값을 유지할 수 있습니다.
+
+서명키·내부 토큰 생성 예시입니다. 각각 실행한 결과를 해당 항목에 넣습니다.
+
+```bash
+python3 -c 'import secrets; print(secrets.token_urlsafe(48))'  # JWT_SECRET
+python3 -c 'import secrets; print(secrets.token_hex(32))'     # INTERNAL_TOKEN
+```
+
+변수별 사용처는 다음과 같습니다.
 
 | 변수 | 사용처 | 설명 |
 | --- | --- | --- |
@@ -226,7 +256,7 @@ cp .env.example .env
 | `INTERNAL_TOKEN` | backend, rag, voice | 서비스 간 호출용 비밀 (`X-Internal-Token`) |
 | `DB_USERNAME`, `DB_PASSWORD` | db, backend | MariaDB 앱 사용자(기본 `frangizer`)와 비밀번호. Compose가 같은 값으로 사용자를 만듭니다 |
 | `DEMO_PASSWORD` | backend | 시연 계정 비밀번호. **비어 있으면 로그인할 수 없습니다** |
-| `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL` | rag | 외부 모델 설정. 비어 있어도 서비스는 뜨지만 질문은 `503`, 색인은 `EMBEDDING_NOT_CONFIGURED`로 실패합니다. 임베딩 모델은 `text-embedding-3-small` 또는 `-large`이며, 바꾸면 전체를 다시 색인합니다 |
+| `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL` | rag | 외부 모델 설정. LLM 키·모델이 없으면 질문 서비스가 준비되지 않습니다. 임베딩 키·모델이 없으면 색인이 `EMBEDDING_NOT_CONFIGURED`로 실패합니다. 임베딩 모델은 `text-embedding-3-small` 또는 `text-embedding-3-large`이며, 바꾸면 문서를 다시 임베딩·색인해야 합니다 |
 | `EMBEDDING_API_KEY`, `EMBEDDING_DIMENSIONS`, `EMBEDDING_BASE_URL` | rag | 선택. 비우면 `LLM_API_KEY`와 모델 기본 차원을 씁니다 |
 | `DB_URL`, `RAG_URL`, `CORS_ALLOWED_ORIGINS` | backend | 로컬 `bootRun`용 값. Compose에서는 서비스 이름(`db`, `rag`)으로 자동 대체됩니다 |
 | `DOCUMENT_STORE_DIR`, `FAISS_DIR` | backend, rag | 볼륨 안 저장 경로. 기본값 사용 |
@@ -239,7 +269,7 @@ cp .env.example .env
 기본 구성은 **db + backend + rag + voice + web**입니다.
 
 ```bash
-docker compose up -d --build
+docker compose up -d --build --wait --wait-timeout 600
 ```
 
 기동 순서는 `db → backend·rag → web`입니다. 서비스마다 헬스체크가 있어 앞 서비스가 준비된 뒤에 다음 서비스가 시작됩니다. 처음 빌드는 Gradle·npm·Python 의존성을 받느라 몇 분 걸립니다. `.env`에 필수 값(`DB_PASSWORD`, `JWT_SECRET`, `INTERNAL_TOKEN`, `DEMO_PASSWORD`)이 비어 있으면 컨테이너를 띄우기 전에 안내 메시지를 내고 멈춥니다.
@@ -260,10 +290,12 @@ docker compose logs --tail 50 backend
 
 ### 3. 문서 등록 (처음 한 번)
 
-처음 띄운 직후에는 등록된 문서가 없어서 질문에 답할 수 없습니다. `data/source/`의 원본 13건을 등록 → 승인(색인) → 배포합니다. 1~2분 걸리며, 색인할 때 임베딩 API가 호출됩니다.
+처음 띄운 직후에는 등록된 문서가 없어서 질문에 답할 수 없습니다. 기본 원본 13건을 등록 → 승인(색인) → 배포합니다. 처리 시간은 파일·API 응답에 따라 달라지며, 색인할 때 임베딩 API가 호출됩니다.
+
+아래의 `DEMO_PASSWORD에 설정한 값`을 `.env`에 실제 설정한 시연 계정 비밀번호로 바꿔 실행합니다. 스크립트가 본사 계정 `demo-hq-01`로 로그인합니다.
 
 ```bash
-SEED_HQ_PASSWORD=<DEMO_PASSWORD 값> python3 scripts/seed_documents.py --apply --publish --base-url http://localhost/api/v1
+SEED_HQ_PASSWORD='DEMO_PASSWORD에 설정한 값' python3 scripts/seed_documents.py --apply --publish --base-url http://localhost/api/v1
 ```
 
 - `--base-url`은 Nginx 주소(`http://localhost/api/v1`)를 씁니다. 스크립트 기본값(`localhost:8080`)은 배포 구성에서 외부에 열려 있지 않습니다. `WEB_PORT`를 바꿨다면 그 포트로 지정합니다.
@@ -271,6 +303,8 @@ SEED_HQ_PASSWORD=<DEMO_PASSWORD 값> python3 scripts/seed_documents.py --apply -
 - 옵션 없이 실행하면 서버에 보내지 않고 대상 목록만 보여 줍니다. 다시 실행해도 끝난 문서는 건너뜁니다.
 - 레시피 v1.1(`data/staged/`)은 문서 변경 시연에서 본사 화면으로 직접 등록하므로 제외됩니다. 합성 가맹계약서는 `--include-optional`을 붙여야 포함됩니다.
 - `docker compose down -v`로 볼륨을 지우면 문서도 지워지므로 다시 실행합니다.
+
+등록 결과에 실패한 문서가 없는지 확인합니다. 실패하면 원인을 해결한 뒤 재실행하며, 컨테이너가 켜져 있다는 이유로 색인·배포까지 끝났다고 판단하지 않습니다.
 
 화면에서 하나씩 등록할 수도 있습니다. 본사 계정으로 로그인해 문서 관리에서 등록 → 승인 → 색인 완료 확인 → 배포 순서로 진행합니다.
 
@@ -318,6 +352,7 @@ docker compose down -v     # 컨테이너와 볼륨(DB, FAISS 인덱스, 업로�
 
 ### 참고
 
+- LLM API 키·모델 등 `.env`를 바꿨다면 `docker compose up -d`로 변경된 설정의 컨테이너를 재생성합니다. `docker compose restart`만으로는 새 환경변수가 반영되지 않습니다. 키만 바꾸고 기존 임베딩 모델·차원을 유지하면 재색인은 필요 없습니다. JWT 서명키를 바꿨다면 다시 로그인합니다.
 - 문서는 backend 업로드·승인을 거쳐서만 RAG에 들어갑니다. `data/source/`, `data/staged/`(미배포 판본), `eval/`, `docs/`는 컨테이너에 연결하지 않으며 자동 적재하지 않습니다. 구조화 레시피(`data/structured/`)만 읽기 전용으로 연결됩니다.
 - 업로드 문서, FAISS 인덱스, 질의 결과(SQLite)는 `frangizer_data` 볼륨(`/var/lib/frangizer`)에 저장되며, backend가 저장한 문서를 rag가 같은 볼륨에서 읽어 색인합니다. 저장소에는 커밋하지 않습니다.
 - 웹 이미지는 실제 API에 연결되도록 `VITE_USE_MOCK=false`로 빌드됩니다. PC·모바일 화면은 `frontend/` 하나로 실행합니다. 합성 데이터만 확인하려면 `frontend/.env.local`에 `VITE_USE_MOCK=true`를 설정하고 개발 서버를 실행합니다.

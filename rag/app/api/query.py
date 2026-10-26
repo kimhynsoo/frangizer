@@ -7,6 +7,7 @@ from ..auth import check_jwt, check_principal, check_service_token
 from ..errors import ServiceError, unavailable
 from ..privacy import redact_query
 from ..schemas import AnswerEnvelope, InternalQuery
+from ..generation.answer import document_navigation
 
 router = APIRouter()
 
@@ -39,10 +40,15 @@ async def query(request: Request):
     if request.app.state.agent is None:
         raise unavailable()
     safe_context = redact_query(context)
+
+    async def execute():
+        guide = document_navigation(safe_context)
+        return guide if guide is not None else await request.app.state.agent.run(safe_context)
+
     try:
         async with asyncio.timeout(context.deadline_ms / 1000):
             result = await request.app.state.replay.execute(
-                context, lambda: request.app.state.agent.run(safe_context),
+                context, execute,
             )
     except TimeoutError:
         raise ServiceError(504, "UPSTREAM_TIMEOUT", "상담 처리 제한 시간을 초과했습니다.", retryable=True) from None
