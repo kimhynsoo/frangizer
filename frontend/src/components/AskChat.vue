@@ -6,6 +6,7 @@ import * as api from "../api/rag";
 import { newKey, isMock } from "../api/client";
 import { speakLocally } from "../api/voice";
 import { spokenAnswer } from "../api/spoken-answer";
+import { followUpPresentation, temperatureChoice } from "../api/follow-up";
 import SourcePanel from "./SourcePanel.vue";
 import StatusBadge from "./StatusBadge.vue";
 import ErrorNotice from "./ErrorNotice.vue";
@@ -118,18 +119,22 @@ async function send(retry = false, { readAnswer = false } = {}) {
     if (!disposed) busy.value = false;
   }
 }
-function sendFollowUp(text) {
+async function sendFollowUp(text) {
   if (
     !conversationId.value ||
     !props.active ||
     busy.value ||
     loading.value ||
-    voiceActive.value ||
-    handsFreeEnabled.value
+    (voiceActive.value && !handsFreeEnabled.value)
   )
     return;
+  const resumeHandsFree = handsFreeEnabled.value;
+  if (resumeHandsFree) handsFreeControl.value?.stop();
   question.value = text;
-  return send();
+  const result = await send();
+  if (resumeHandsFree && props.active && !disposed)
+    handsFreeControl.value?.start();
+  return result;
 }
 function saveDraft() {
   sessionStorage.setItem(draftKey, question.value);
@@ -189,7 +194,12 @@ function setVoiceActive(value) {
 }
 async function submitQuestion(payload) {
   voiceActive.value = false;
-  question.value = payload.text;
+  const latestResult = messages.value.at(-1)?.result;
+  const contextualChoice =
+    latestResult && followUpPresentation(latestResult).temperature
+      ? temperatureChoice(payload.text)
+      : null;
+  question.value = contextualChoice || payload.text;
   saveDraft();
   return await send(false, payload);
 }
@@ -294,7 +304,7 @@ onUnmounted(() => {
                   !!conversationId
                 "
                 :follow-up-disabled="
-                  busy || loading || voiceActive || handsFreeEnabled
+                  busy || loading || (voiceActive && !handsFreeEnabled)
                 "
                 @follow-up="sendFollowUp"
                 :disable-speech="voiceActive"

@@ -47,17 +47,22 @@ const session = createHandsFree({
   onError: (text) => (error.value = text),
   onNotice: (text) => (notice.value = text),
 });
-function toggle() {
-  if (enabled.value) {
-    session.stop();
-    return;
-  }
-  if (!supported || props.disabled || !props.active) return;
+function startListening() {
+  if (enabled.value || !supported || props.disabled || !props.active)
+    return false;
   error.value = "";
   notice.value = "";
   heard.value = "";
   aliases.value = loadWakeProfile(props.profileKey);
   session.start();
+  return true;
+}
+function toggle() {
+  if (enabled.value) {
+    session.stop();
+    return;
+  }
+  startListening();
 }
 function openEnrollment() {
   if (!supported || props.disabled || !props.active) return;
@@ -97,6 +102,7 @@ onUnmounted(() => {
 });
 defineExpose({
   stop: stopAll,
+  start: startListening,
   openEnrollment,
   supported,
   registrationCount: computed(() => aliases.value.length),

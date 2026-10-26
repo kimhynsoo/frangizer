@@ -1,5 +1,10 @@
 import { browserListen, speakLocally, normalizeCommand } from "./voice";
 import { spokenAnswer } from "./spoken-answer";
+import {
+  followUpPresentation,
+  hasFollowUpQuestion,
+  temperatureChoice,
+} from "./follow-up";
 import { normalizeWakeAlias, validWakeAlias } from "./wake-profile";
 
 export function wakeQuestion(text, aliases = []) {
@@ -213,14 +218,25 @@ export function createHandsFree({
             await pause(signal);
             continue;
           }
+          const expectsFollowUp =
+            allowReadAloud && hasFollowUpQuestion(result);
+          const expectsTemperature =
+            expectsFollowUp && followUpPresentation(result).temperature;
           if (allowReadAloud && result.answer) {
             onState("speaking");
             let playback;
             try {
-              playback = await speakWithWakeInterrupt(
-                spokenAnswer(result, question),
-                { signal, listen, speak, getAliases },
-              );
+              playback = expectsFollowUp
+                ? {
+                    heard: null,
+                    ok: await speak(spokenAnswer(result, question), { signal }),
+                  }
+                : await speakWithWakeInterrupt(spokenAnswer(result, question), {
+                    signal,
+                    listen,
+                    speak,
+                    getAliases,
+                  });
             } catch {
               check();
               onNotice(
@@ -239,6 +255,65 @@ export function createHandsFree({
               onNotice(
                 "기기에 한국어 읽기 음성이 없어 답변은 화면으로 표시합니다.",
               );
+          }
+          if (queuedWake === null && expectsFollowUp) {
+            onPartial("");
+            onState("question");
+            const spokenChoice = (
+              await listen({
+                signal,
+                maxSeconds: 15,
+                allowEmpty: true,
+                onPartial,
+                stopOnFinal: () => true,
+              })
+            ).trim();
+            check();
+            if (cancelQuestion(spokenChoice)) {
+              await pause(signal);
+              continue;
+            }
+            const choice = expectsTemperature
+              ? temperatureChoice(spokenChoice)
+              : spokenChoice;
+            if (!choice) {
+              onNotice(
+                expectsTemperature
+                  ? "온도를 확인하지 못했어요. 핫 또는 아이스라고 바로 말씀해 주세요"
+                  : "후속 답변을 듣지 못했어요. 다시 호출한 뒤 질문해 주세요",
+              );
+              await pause(signal);
+              continue;
+            }
+            onPartial(choice);
+            onState("thinking");
+            let followUpResult;
+            try {
+              followUpResult = await ask(choice);
+            } catch {
+              /* The chat view keeps the failed request and its retry control. */
+            }
+            check();
+            if (!followUpResult) {
+              onNotice(
+                "후속 답변을 가져오지 못했어요. 음성 대기는 유지합니다. 호출어를 부르고 다시 질문해 주세요",
+              );
+              await pause(signal);
+              continue;
+            }
+            if (followUpResult.answer) {
+              onState("speaking");
+              const playback = await speakWithWakeInterrupt(
+                spokenAnswer(followUpResult, choice),
+                { signal, listen, speak, getAliases },
+              );
+              if (playback.heard !== null) queuedWake = playback.heard;
+              check();
+              if (!playback.ok)
+                onNotice(
+                  "기기에 한국어 읽기 음성이 없어 답변은 화면으로 표시합니다.",
+                );
+            }
           }
           if (queuedWake === null) await pause(signal);
         } catch (error) {

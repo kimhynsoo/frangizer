@@ -29,3 +29,20 @@ export function followUpPresentation(result) {
     );
   return { additional, temperature };
 }
+
+export function temperatureChoice(text) {
+  const value = normalize(text);
+  const hot = /(?:핫|hot|뜨겁|뜨거운|따뜻)/i.test(value);
+  const iced = /(?:아이스|iced|차갑|차가운)/i.test(value);
+  if (hot === iced) return null;
+  return hot ? "핫" : "아이스";
+}
+
+export function hasFollowUpQuestion(result) {
+  return (
+    result?.status === "needs_review" &&
+    (result.follow_up_questions || []).some(
+      (text) => typeof text === "string" && cleanAnswerText(text),
+    )
+  );
+}
