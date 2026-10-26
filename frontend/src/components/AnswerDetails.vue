@@ -3,14 +3,18 @@ import { ref, computed, watch, onUnmounted } from "vue";
 import { ArrowUpRight, BookOpen, Volume2 } from "@lucide/vue";
 import { speakLocally } from "../api/voice";
 import { spokenAnswer, cleanAnswerText } from "../api/spoken-answer";
+import { followUpPresentation } from "../api/follow-up";
 const props = defineProps({
   result: Object,
+  allowFollowUp: { type: Boolean, default: false },
+  followUpDisabled: { type: Boolean, default: false },
   externalReading: { type: Boolean, default: null },
   question: { type: String, default: "" },
   disableSpeech: { type: Boolean, default: false },
   allowReadAloud: { type: Boolean, default: true },
 });
-const emit = defineEmits(["source", "toggleRead"]);
+const emit = defineEmits(["source", "toggleRead", "followUp"]);
+const followUps = computed(() => followUpPresentation(props.result));
 const notice = ref(""),
   reading = ref(false);
 const isReading = computed(() => props.externalReading ?? reading.value);
@@ -58,7 +62,44 @@ watch(
         })
       }}
     </p>
-    <p class="answer-text">{{ cleanAnswerText(result.answer) }}</p>
+    <p v-if="cleanAnswerText(result.answer)" class="answer-text">
+      {{ cleanAnswerText(result.answer) }}
+    </p>
+    <section
+      v-if="
+        followUps.additional.length || (allowFollowUp && followUps.temperature)
+      "
+      class="follow-up-section"
+      aria-label="확인 질문"
+    >
+      <template v-if="followUps.additional.length">
+        <strong class="follow-up-label">확인 질문</strong>
+        <p
+          v-for="text in followUps.additional"
+          :key="text"
+          class="follow-up-question"
+        >
+          {{ text }}
+        </p>
+      </template>
+      <div
+        v-if="allowFollowUp && followUps.temperature"
+        class="follow-up-choices"
+        role="group"
+        aria-label="음료 온도 선택"
+      >
+        <button
+          v-for="choice in ['핫', '아이스']"
+          :key="choice"
+          type="button"
+          class="button secondary small"
+          :disabled="followUpDisabled"
+          @click="$emit('followUp', choice)"
+        >
+          {{ choice }}
+        </button>
+      </div>
+    </section>
     <button
       v-if="allowReadAloud"
       class="button ghost small"

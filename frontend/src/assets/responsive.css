@@ -834,3 +834,28 @@
 .hands-free-error {
   color: #883e30;
 }
+
+.follow-up-section {
+  margin: 14px 0 20px;
+}
+.follow-up-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--green-dark);
+  font-size: 12px;
+}
+.follow-up-section .follow-up-question {
+  margin: 8px 0;
+  line-height: 1.8;
+}
+.follow-up-choices {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.follow-up-choices > .button {
+  min-height: 44px;
+  min-width: 88px;
+  padding: 10px 20px;
+}

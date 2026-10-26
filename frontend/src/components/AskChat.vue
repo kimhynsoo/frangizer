@@ -118,6 +118,19 @@ async function send(retry = false, { readAnswer = false } = {}) {
     if (!disposed) busy.value = false;
   }
 }
+function sendFollowUp(text) {
+  if (
+    !conversationId.value ||
+    !props.active ||
+    busy.value ||
+    loading.value ||
+    voiceActive.value ||
+    handsFreeEnabled.value
+  )
+    return;
+  question.value = text;
+  return send();
+}
 function saveDraft() {
   sessionStorage.setItem(draftKey, question.value);
 }
@@ -275,6 +288,15 @@ onUnmounted(() => {
               <AnswerDetails
                 :result="message.result"
                 :question="message.question"
+                :allow-follow-up="
+                  active &&
+                  message.id === messages.at(-1)?.id &&
+                  !!conversationId
+                "
+                :follow-up-disabled="
+                  busy || loading || voiceActive || handsFreeEnabled
+                "
+                @follow-up="sendFollowUp"
                 :disable-speech="voiceActive"
                 :allow-read-aloud="auth.user.role !== 'prospect'"
                 :external-reading="

@@ -2,6 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 let clientModule;
 beforeEach(async () => {
   vi.useFakeTimers();
+  // Synthetic v1.0 is valid before its fixed 2026-10-26 expiry.
+  vi.setSystemTime(new Date("2026-10-23T03:00:00Z"));
   vi.resetModules();
   const values = new Map();
   vi.stubGlobal("sessionStorage", {
@@ -54,4 +56,14 @@ it("다운로드에 외부 주소를 주어도 Bearer 토큰을 전송하지 않
     clientModule.downloadFile("https://external.invalid/file", "file.pdf"),
   ).rejects.toThrow("허용된 문서");
   expect(request).not.toHaveBeenCalled();
+});
+
+it("모의 문서 적용 종료 후에는 answered를 강제로 반환하지 않는다", async () => {
+  vi.setSystemTime(new Date("2026-10-26T03:00:00Z"));
+  clientModule.tokenStorage.set("synthetic-owner");
+  const api = await import("../src/api/rag.js");
+  const result = await settle(
+    api.ask({ question: "바닐라라테 계량을 알려주세요." }, crypto.randomUUID()),
+  );
+  expect(result.data.status).toBe("needs_review");
 });
