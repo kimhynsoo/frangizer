@@ -5,7 +5,9 @@ from pydantic import Field
 from ..schemas import ContractModel
 
 FOLLOWUP = re.compile(r'그건|그거|그것|그\s*(?:금액|비용|기준|항목)|아까|앞서|다음\s*단계')
-COMPARISON = re.compile(r'비교|차이|같은\s*기준|각각|구분.*(?:교육|관리)|(?:교육|관리).*구분')
+COMPARISON = re.compile(r'비교|차이|같은\s*기준|각각|구분.*(?:교육|관리)|(?:교육|관리).*구분'
+                        r'|별도(?:인가|인지|야|입니까)|같(?:은가|나요|아|습니까|은지)'
+                        r'|동일(?:한가|한지|해|합니까)|다르(?:나요|니|죠)|다른(?:가|지)')
 RISK = re.compile(r'위생|교육\s*대상|규정|법령|예외|취소|해지|반환|환불|보상|배상|책임|대체|바꿔|해도|의무|가능')
 LOOKUP = re.compile(r'얼마|금액|합계|납부|언제|기한|지급|로열티|가맹비|보증금')
 FOCUS_STOP = {'기준', '금액', '방법', '질문', '내용', '포함', '단계', '얼마', '언제', '어디', '무엇', '누구', '여부', '정도'}
@@ -126,7 +128,7 @@ def resolve_aggregate_followup(context, candidates):
 def default_plan(context):
     question = context.question
     intent = 'comparison' if COMPARISON.search(question) else 'unknown'
-    if LOOKUP.search(question) and not RISK.search(question):
+    if intent != 'comparison' and LOOKUP.search(question) and not RISK.search(question):
         intent = 'lookup'
     return QuestionPlan(intent=intent, resolved_question=question, queries=[question],
                         focus=None, focus_turn=None, clarification=False)
@@ -165,11 +167,18 @@ def needs_reference(context):
     # '교육비에 부가세가 포함?' names its target; '교육비까지 포함?' omits it.
     if '포함' in question:
         explicit_target = re.search(r'\S+(?:에는|엔|에)\s*|\S+(?:은|는)\s+\S+(?:이|가|을|를)\s+포함', question)
-        return not explicit_target
+        # A preceding clause can name the target within this same message:
+        # '배송비는 얼마인가요? 설치비도 포함인가요?' needs no older turn.
+        # Explicit backward references above still take precedence.
+        current_target = re.search(r'\S+(?:은|는|이|가|을|를)\s+.+?[?？,，]\s*\S.*포함', question)
+        return not (explicit_target or current_target)
     return bool(re.fullmatch(r'\s*(?:언제까지|얼마|몇\s*일|왜|어떻게)[^?？]*[?？]?\s*', question))
 
 
 def validate_focus(plan, context):
+    # A model's lookup label must not erase an explicit relational request.
+    if COMPARISON.search(context.question):
+        plan = plan.model_copy(update={'intent': 'comparison'})
     turns = ([t.answer for t in context.history] if plan.focus_source == 'answer' else
              [t.question for t in context.history] + [context.question])
     norm = lambda s: ''.join(s.split())

@@ -3,6 +3,8 @@ import hashlib
 import json
 from dataclasses import replace
 
+import pytest
+
 from app.generation.agent import CounselAgent
 from app.generation.question import QuestionPlan, validate_focus
 from app.schemas import InternalQuery
@@ -93,6 +95,57 @@ def test_explicit_comparison_does_not_require_a_copied_single_focus():
     assert not checked.clarification and checked.focus is None
 
 
+@pytest.mark.parametrize('question', [
+    '계약이행보증금과 교육비는 별도인가요? 납부 기한도 같은가요?',
+    '- 계약이행보증금과 교육비는 별도인가요? 납부 기한도 같은가요?',
+    '배송비와 설치비는 별도인가요? 지급기한도 동일한가요?',
+    '가입비와 이용료의 납부일이 같나요?',
+])
+def test_relational_requests_cannot_be_reduced_to_one_table_lookup(question):
+    from app.generation.question import default_plan, needs_planning
+    c = context(question)
+    assert default_plan(c).intent == 'comparison' and needs_planning(c)
+    mistaken = QuestionPlan(intent='lookup', resolved_question=question, queries=[question],
+                            focus=None, focus_turn=None, clarification=False)
+    checked = validate_focus(mistaken, c)
+    assert checked.intent == 'comparison' and not checked.clarification
+    model = ScriptedModel(plans=[mistaken])
+    agent = CounselAgent(model, FixtureRetriever())
+    assert agent._exact_coverage({'context': c, 'plan': mistaken, 'evidence': {}}) is None
+    result = asyncio.run(agent.run(c))
+    assert model.plan_calls == 1 and model.assess_calls == 1
+
+
+def test_simple_amount_request_remains_lookup_without_extra_planning():
+    from app.generation.question import default_plan, needs_planning
+    c = context('로열티는 얼마이고 언제까지 내나요? 부가세도 포함인가요?')
+    assert default_plan(c).intent == 'lookup' and not needs_planning(c)
+
+
+def test_comparison_keeps_requested_table_fields_from_authorized_candidates():
+    from app.generation.question import default_plan
+    from tests.support import source
+    c = context('배송비와 설치비는 별도인가요? 납부 기한도 같은가요?')
+    rows = {}
+    for n, name in enumerate(('배송비', '설치비')):
+        title, unit = '납부 기준', '(단위: 천원)'
+        e = source(f'{title}\n{unit}\n- {name}: 금액 30 · 지급기한 결제 후 3일 이내', f'cost-{n}')
+        rows[e.metadata.chunk_id] = replace(e, table={'schema': 'reviewed-cells-v1', 'reviewed': True,
+            'title': title, 'unit': unit, 'columns': ['구분', '금액', '지급기한'],
+            'rows': [[name, '30', '결제 후 3일 이내']]})
+    other = source('일반 예치 절차 설명', 'other')
+    updates = {'candidates': {other.metadata.chunk_id: other, **rows},
+               'evidence': {other.metadata.chunk_id: other}}
+    agent = CounselAgent(ScriptedModel(), FixtureRetriever())
+    state = {'context': c, 'plan': default_plan(c)}
+    result = agent._comparison_context(state, updates)
+    assert list(result['evidence']) == [*rows, 'other']
+    assert result['evidence']['cost-0'] is rows['cost-0']
+    assert list(updates['evidence']) == ['other']
+    state['plan'] = state['plan'].model_copy(update={'intent': 'lookup'})
+    assert agent._comparison_context(state, updates) is updates
+
+
 def test_focus_candidates_are_literal_user_spans_and_exclude_the_included_component():
     from app.generation.question import focus_candidates
     c = context('교육비까지 포함이야?', [{'question': '계약이행보증금은 얼마야?', 'answer': '예치가맹금 4,800천원도 언급'}])
@@ -107,6 +160,41 @@ def test_self_contained_inclusion_question_does_not_inherit_an_old_target():
     retriever = FixtureRetriever()
     asyncio.run(CounselAgent(model, retriever).run(c))
     assert model.plan_calls == 0 and retriever.searches == [c.question]
+    assert json.loads(model.seen_messages[-1].content)['user_question_chain'] == [c.question]
+
+
+def test_independent_question_hides_old_topics_but_reference_keeps_antecedent():
+    history = [{'question': '교육비는 얼마야?', 'answer': '이전 교육비 안내'}]
+    agent = CounselAgent(ScriptedModel(), FixtureRetriever())
+    c = context('계약이 끝나면 보증금을 돌려받으려면 어떤 서류가 필요해?', history)
+    payload = agent._context({'context': c, 'plan': None})
+    assert payload['history'] == [] and payload['user_question_chain'] == [c.question]
+    followup = context('그 금액에 교육비도 포함돼?', history)
+    payload = agent._context({'context': followup, 'plan': None})
+    assert payload['history'] and payload['user_question_chain'] == [history[0]['question'], followup.question]
+
+
+@pytest.mark.parametrize('question', [
+    '로열티는 얼마이고 언제까지 내나요? 부가세도 포함인가요?',
+    '매장을 이전하며 인테리어를 바꾸면 본사는 얼마나 부담하고, 장비 교체비도 포함되나요?',
+    '배송비는 얼마인가요? 설치비도 포함인가요?',
+    '제품을 교환하면 비용이 얼마나 들고, 반송비도 포함되나요?',
+])
+def test_current_message_clauses_supply_inclusion_target_without_old_conversation(question):
+    c = context(question, [{'question': '계약이행보증금은 얼마야?', 'answer': '다른 항목의 안내'}])
+    from app.generation.question import needs_reference, needs_planning
+    assert not needs_reference(c) and not needs_planning(c)
+    model, retriever = ScriptedModel(), FixtureRetriever()
+    asyncio.run(CounselAgent(model, retriever).run(c))
+    assert model.plan_calls == 0 and retriever.searches == [question]
+
+
+@pytest.mark.parametrize('question', ['교육비까지 포함이야?', '부가세도 포함인가요?',
+    '그 금액에 교육비도 포함돼?', '아까 그 비용은 얼마이고, 교육비도 포함인가요?'])
+def test_genuinely_omitted_or_explicit_backward_targets_still_require_reference(question):
+    from app.generation.question import needs_reference
+    c = context(question, [{'question': '계약이행보증금은 얼마야?', 'answer': '기존 항목 안내'}])
+    assert needs_reference(c)
 
 
 def test_answer_topic_can_be_resolved_but_its_amount_is_not_evidence():

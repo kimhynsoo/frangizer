@@ -26,7 +26,13 @@ def text_terms(text):
 
 
 def query_terms(query):
-    return sorted(set(text_terms(query)))
+    terms = set(text_terms(query))
+    # Everyday verbs often disappear from noun-based BM25, while manuals use
+    # nominal headings. Expand query vocabulary only, never source facts.
+    for phrase, equivalent in (('끝나', '종료'), ('돌려받', '반환'), ('돌려줘', '반환')):
+        if phrase in query:
+            terms.add(equivalent)
+    return sorted(terms)
 
 
 @lru_cache(maxsize=8192)

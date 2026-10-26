@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.generation.recipe import RecipeShortcut, RagRuntime, parse_request
+from app.generation.recipe import RecipeShortcut, RagRuntime, parse_request, is_catalog_request
 from app.indexing.job import run_index_job
 from app.retrieval.faiss_store import FaissRetriever
 from app.schemas import HistoryTurn, InternalQuery
@@ -44,6 +44,43 @@ def context(jobs, question, version='1.0', date='2026-10-23T12:00:00+09:00'):
     p['as_of'] = date
     p['allowed_versions'] = [{k: jobs[version][k] for k in ('document_id', 'version_id', 'index_revision')}]
     return InternalQuery.model_validate(p)
+
+
+@pytest.mark.parametrize('question', ['호출 가능한 레시피', '레시피 목록 알려줘',
+    '조회 가능한 메뉴 목록', '어떤 메뉴 있어?', '어떤 레시피가 있나요?', '등록된 레시피 목록 보여주세요'])
+def test_catalog_intent(question):
+    assert is_catalog_request(question)
+
+
+@pytest.mark.parametrize('question', ['판매 가능한 메뉴', '메뉴 목록에서 삭제해도 돼?',
+    '레시피 목록과 교육비 알려줘', '아이스 바닐라라떼 레시피', '레시피 변경 가능한가요?'])
+def test_catalog_does_not_swallow_counsel_or_individual_lookup(question):
+    assert not is_catalog_request(question)
+
+
+def test_catalog_is_grounded_in_allowed_original_records(recipes):
+    shortcut, jobs = recipes
+    request = context(jobs, '호출 가능한 레시피')
+    result = asyncio.run(shortcut.try_answer(request))
+    assert result.result.status == 'answered'
+    assert '바닐라라테: HOT · ICED' in result.result.answer
+    assert '딸기라테: ICED' in result.result.answer
+    assert '허니자몽' not in result.result.answer  # v1.1-only menu is not deployed here.
+    assert result.result.sources and all(s.version == '1.0' for s in result.result.sources)
+    assert result.retrieval.llm_called is False and result.usage.embedding_tokens == 0
+    # Catalog entries must also match the indexed original, not just JSON metadata.
+    shortcut.data = deepcopy(shortcut.data)
+    for r in shortcut.data['recipe_versions']:
+        if r['menu_id'] == 'vanilla_latte':
+            r['ingredients'][0]['amount'] = '999'
+    result = asyncio.run(shortcut.try_answer(request))
+    assert '바닐라라테:' not in result.result.answer
+    denied = request.model_copy(update={'allowed_versions': ()})
+    result = asyncio.run(shortcut.try_answer(denied))
+    assert result.result.status == 'needs_review' and not result.result.sources
+    assert '현재 조회 가능한 레시피가 없습니다' in result.result.answer
+    prospect = request.model_copy(update={'principal': request.principal.model_copy(update={'role': 'prospect'})})
+    assert asyncio.run(shortcut.try_answer(prospect)) is None
 
 
 @pytest.mark.parametrize('version,date,expected', [
@@ -124,6 +161,24 @@ def test_pumps_use_published_source_mapping_without_llm(recipes, version, date, 
     assert count in response.result.answer and amount in response.result.answer
     assert 'HOT·ICED 공통' in response.result.answer
     assert not response.retrieval.llm_called and response.usage.embedding_tokens == 0
+
+
+def test_everyday_recipe_wording_keeps_exact_fast_lookup(recipes):
+    shortcut, jobs = recipes
+    samples = [
+        ('아이스 바닐라라떼 시럽 몇 펌프야?', ('4회', '20 mL'), 0),
+        ('아이스 바닐라라떼 덜 달게 하면 시럽 몇 펌프야?', ('3회', '15 mL'), 0),
+        ('아이스 딸기라떼 제조 순서 알려줘', ('딸기라테',), 3),
+    ]
+    for question, expected, steps in samples:
+        response = asyncio.run(shortcut.try_answer(context(jobs, question)))
+        assert response.result.status == 'answered' and response.result.sources
+        assert all(text in response.result.answer for text in expected)
+        assert len(response.result.steps) == steps
+        assert not response.retrieval.llm_called and response.usage.embedding_tokens == 0
+    for question in ['아이스 바닐라라떼 덜 달게 하면 우유 대신 두유 넣어도 돼?',
+                     '아이스 바닐라라떼 시럽 10 mL로 하면 몇 펌프야?']:
+        assert asyncio.run(shortcut.try_answer(context(jobs, question))) is None
 
 
 def test_full_recipe_contains_ingredients_and_unnumbered_steps(recipes):

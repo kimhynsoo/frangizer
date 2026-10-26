@@ -21,6 +21,15 @@ def compact(text):
     return re.sub(r'\s+', '', text).lower().replace('라떼', '라테')
 
 
+def is_catalog_request(question):
+    text = compact(question).rstrip('?!？!.,。')
+    return bool(re.fullmatch(
+        r'(?:(?:조회|호출|확인|사용)가능한(?:레시피|메뉴)(?:목록)?'
+        r'|(?:등록된)?(?:레시피|메뉴)목록'
+        r'|어떤(?:레시피|메뉴)(?:가)?있(?:어|어요|나요))'
+        r'(?:을|를)?(?:알려줘|알려주세요|보여줘|보여주세요)?', text))
+
+
 @dataclass(frozen=True)
 class RecipeRequest:
     menu_id: str
@@ -65,6 +74,7 @@ def parse_request(question, data):
         aliases = [name]
         if compact(name) == '덜달게':
             aliases += ['달지 않게', '덜 달게']
+        aliases += [a + ' 하면' for a in aliases]
         if take(aliases):
             options.append(name)
     if len(options) > 1:
@@ -96,7 +106,7 @@ def parse_request(question, data):
     for intent, phrases in (
         ('recipe', ('레시피', '만드는법', '제조법', '어떻게만들어', '어떻게만들어요')),
         ('next', ('다음단계', '다음순서', '다음')),
-        ('steps', ('단계', '순서')),
+        ('steps', ('제조 순서', '제조 단계', '단계', '순서')),
         ('pumps', ('펌프횟수', '펌프')),
         ('ingredients', ('재료',)),
         ('quantity', ('몇밀리리터', '몇밀리', '몇그램', '몇ml', '몇g', '얼만큼', '얼마나', '얼마', '계량', '양')),
@@ -110,7 +120,7 @@ def parse_request(question, data):
     filler = ('알려주세요', '알려줘', '알려줄래', '알려줘요', '보여줘', '보여주세요',
               '넣어요', '넣어', '들어가요', '들어가', '필요해요', '필요해',
               '무엇인지', '확인',
-              '어떻게', '예요', '이에요', '인가요', '이야', '뭐야', '뭔가요',
+              '어떻게', '예요', '이에요', '인가요', '이야', '뭐야', '뭔가요', '야',
               '주세요', '좀', '몇', '는', '은', '을', '를', '이', '가', '에', '로',
               '와', '과', '랑', '하고', '그리고', '까지', '도', '요', '의')
     take(filler)
@@ -192,6 +202,7 @@ class RecipeShortcut:
             text=result.text, placement='answer', evidence_refs=refs, quantities=list(result.quantities))])
 
     async def try_answer(self, context):
+        catalog = is_catalog_request(context.question)
         request = parse_request(context.question, self.data)
         # A bare temperature selects the latest explicit recipe request only.
         # Re-read authorized sources below; previous answers are never recipe data.
@@ -203,10 +214,10 @@ class RecipeShortcut:
                 if previous is not None and not previous.temperatures:
                     temperature = 'HOT' if choice[1] in ('핫', 'hot') else 'ICED'
                     request = replace(previous, temperatures=(temperature,))
-        if request is None:
+        if request is None and not catalog:
             return None
         started = time.monotonic()
-        result = await self.execute(context, request)
+        result = await self.catalog(context) if catalog else await self.execute(context, request)
         if result is None:
             return None
         draft = Draft(answer=result.text, steps=list(result.steps), status='needs_review' if result.follow else 'answered',
@@ -217,6 +228,37 @@ class RecipeShortcut:
             usage=Usage(input_tokens=0, output_tokens=0, embedding_tokens=0, model='not-used',
                         embedding_model='not-used', estimated_cost_usd=None), llm_called=False,
             no_evidence_action='clarify' if result.follow and not result.items else None)
+
+    async def _available_records(self, context):
+        candidates = await self.retriever.recipe_candidates(context, self.data['doc_id'])
+        recipes = {}
+        for record in self.data['recipe_versions']:
+            for source in record['sources']:
+                for sha, items in candidates:
+                    documents = [d for d in self.data['source_documents'] if d['version'] == source['document_version'] and d['sha256'] == sha]
+                    page_items = tuple(e for e in items if e.metadata.page == source['page'] and e.metadata.version == source['document_version'])
+                    if documents and page_items:
+                        recipes[record['recipe_version_id']] = (record, page_items)
+        return recipes
+
+    async def catalog(self, context):
+        if context.principal.role not in ('owner', 'hq'):
+            return None
+        available = await self._available_records(context)
+        menus, evidence = {}, {}
+        names = {m['menu_id']: m['display_name'] for m in self.data['menus']}
+        for record, items in available.values():
+            if record['menu_id'] not in names or recipe_source(record, items) is None:
+                continue
+            menus.setdefault(record['menu_id'], set()).add(record['temperature'])
+            evidence.update((e.metadata.chunk_id, e) for e in items)
+        if not menus:
+            notice = '현재 조회 가능한 레시피가 없습니다. 배포된 레시피 문서와 접근 권한을 확인해 주세요.'
+            return RecipeResult(notice, follow=(notice,))
+        lines = [f"- {names[mid]}: {' · '.join(t for t in ('HOT', 'ICED') if t in temperatures)}"
+                 for mid, temperatures in menus.items()]
+        return RecipeResult('현재 조회 가능한 레시피입니다.\n' + '\n'.join(lines)
+                            + '\n메뉴명과 온도를 함께 입력해 주세요.', tuple(evidence.values()))
 
     async def execute(self, context, request):
         """Authorized stored values and provenance; public rendering belongs to callers."""
@@ -233,17 +275,9 @@ class RecipeShortcut:
                                 follow=('한 잔 기준 레시피를 확인할까요?',))
         if len(request.temperatures) > 1:
             return RecipeResult('한 번에 확인할 메뉴 온도를 선택해 주세요.', follow=('HOT과 ICED 중 어느 레시피인가요?',))
-        candidates = await self.retriever.recipe_candidates(context, self.data['doc_id'])
-        recipes = {}
-        for record in self.data['recipe_versions']:
-            if record['menu_id'] != request.menu_id or (request.temperatures and record['temperature'] not in request.temperatures):
-                continue
-            for source in record['sources']:
-                for sha, items in candidates:
-                    documents = [d for d in self.data['source_documents'] if d['version'] == source['document_version'] and d['sha256'] == sha]
-                    page_items = tuple(e for e in items if e.metadata.page == source['page'] and e.metadata.version == source['document_version'])
-                    if documents and page_items:
-                        recipes[record['recipe_version_id']] = (record, page_items)
+        recipes = {key: (record, items) for key, (record, items) in (await self._available_records(context)).items()
+                   if record['menu_id'] == request.menu_id
+                   and (not request.temperatures or record['temperature'] in request.temperatures)}
         if not recipes:
             return RecipeResult('현재 허용된 판본에서 해당 메뉴의 적용 레시피를 확인할 수 없습니다.',
                                 follow=('메뉴명과 적용 판본을 확인해 주세요.',))

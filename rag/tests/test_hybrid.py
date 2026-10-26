@@ -22,6 +22,17 @@ def test_short_korean_nouns_and_article_identifiers_survive():
     assert {'우유', '이물', '직원', '위생', '교육', '제41조'} <= set(query_terms('우유에 이물, 직원의 위생교육과 제41조'))
 
 
+def test_everyday_event_words_retrieve_matching_document_terminology():
+    question = '계약이 끝나면 보증금을 돌려받으려면 어떤 서류가 필요해?'
+    items = [replace(fixture_evidence(), text='허위 정보 제공에 따른 가맹금 반환 요구 서면'),
+             replace(fixture_evidence(), text='계약 종료 후 이행보증금 반환 청구 서류')]
+    before = [e.text for e in items]
+    assert {'종료', '반환'} <= set(query_terms(question))
+    scores = bm25_scores(question, items)
+    assert scores[1] > scores[0]
+    assert [e.text for e in items] == before
+
+
 def test_rrf_agreement_and_score_scale_independence():
     assert reciprocal_rank_fusion([[1, 2, 0], [2, 0, 1]])[0] == 2
     items = [replace(fixture_evidence(), text='제품 우유 이물혼입'),

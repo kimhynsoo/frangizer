@@ -265,6 +265,69 @@ def literal_claim_ids(blocks, evidence):
     return [b.block_id for b, _ in _literal_row_matches(blocks, evidence)]
 
 
+def _recurring_payment_display(matches, evidence):
+    """Display periodic amount columns with their literal payment fields.
+
+    Only exact server-owned rows in one item and revision are combined. Keep
+    each source's conditions, and leave ambiguous or conflicting amounts alone.
+    Reviewed blocks and their quantity/citation bindings are never modified.
+    """
+    def scope(block, cell):
+        m = evidence[cell['evidence_ref']['chunk_id']].metadata
+        return (block.item_id, m.document_id, m.version_id, m.index_revision,
+                m.effective_from, m.effective_until)
+
+    display, handled = {}, set()
+    for block, cells in matches:
+        c = cells[0]
+        if c['label'] not in ('매월', '매년', '매분기') or block.placement != 'answer':
+            continue
+        unit = re.search(r'단위\s*[:：]\s*(백만원|만원|천원|원)(?![가-힣])', c['unit'])
+        amounts = [v for v in cells if re.fullmatch(NUMBER, v['value'])]
+        if unit is None or len(amounts) != 1:
+            continue
+        amount = amounts[0]
+        name, identity = amount['column'], scope(block, c)
+        if not re.search(r'(?:금액|비용|요금|대금|납부액|부담금|보증금|료|비|로열티)$', name):
+            continue
+        key = (identity, name)
+        if key in handled:
+            continue
+        related = [(b, row) for b, row in matches if b.placement == 'answer'
+                   and scope(b, row[0]) == identity
+                   and (row[0]['label'] == name or
+                        (row[0]['label'] == c['label'] and any(v['column'] == name for v in row)))]
+        # Do not reconcile distinct representations, values or table units.
+        periodic = [v for _, row in related if row[0]['label'] == c['label']
+                    for v in row if v['column'] == name]
+        if any((v['value'], v['unit']) != (amount['value'], amount['unit']) for v in periodic):
+            continue
+        lines = [f"{name}: {c['label']} {amount['value']}{unit[1]}"]
+        seen, deadlines, contexts = set(), set(), []
+        for b, row in related:
+            for v in row:
+                if row[0]['label'] == c['label'] and v['column'] == name:
+                    continue
+                field = (v['column'], v['value'])
+                payment = re.sub(r'\s+', '', v['column']) in ('지급기한', '납부기한', '비고') and '납부' in v['value']
+                if field in seen or (payment and v['value'] in deadlines):
+                    continue
+                lines.append(f"- {v['column']}: {v['value']}")
+                seen.add(field)
+                if payment:
+                    deadlines.add(v['value'])
+            m = evidence[row[0]['evidence_ref']['chunk_id']].metadata
+            context = (m.page, row[0]['title'], row[0]['unit'])
+            if row[0]['unit'] and context not in contexts:
+                contexts.append(context)
+        lines.extend(f"- 표 조건{(' (PDF ' + str(page) + '쪽)') if page else ''}: {title} {conditions}"
+                     for page, title, conditions in contexts)
+        display[related[0][0].block_id] = '\n'.join(lines)
+        display.update((b.block_id, None) for b, _ in related[1:])
+        handled.add(key)
+    return display
+
+
 def table_display_rows(blocks, evidence):
     """Share identical literal row headings; retain differing source contexts.
 
@@ -274,7 +337,8 @@ def table_display_rows(blocks, evidence):
     Identical rows may answer multiple items; their coverage blocks stay intact.
     """
     groups, display = {}, {}
-    for block, cells in _literal_row_matches(blocks, evidence):
+    matches = list(_literal_row_matches(blocks, evidence))
+    for block, cells in matches:
         c = cells[0]
         unit = re.search(r'단위\s*[:：]\s*(' + UNIT + r')', c['unit'])
         if unit is None or block.placement != 'answer':
@@ -301,6 +365,7 @@ def table_display_rows(blocks, evidence):
                 for _, r, m in rows))
         display[first.block_id] = text
         display.update((b.block_id, None) for b, _, _ in rows[1:])
+    display.update(_recurring_payment_display(matches, evidence))
     return display
 
 
