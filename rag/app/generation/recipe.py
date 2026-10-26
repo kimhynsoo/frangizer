@@ -6,7 +6,7 @@ Draft JSON is not an authority: source hash and every returned field must match 
 import json
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..schemas import Usage
@@ -193,6 +193,16 @@ class RecipeShortcut:
 
     async def try_answer(self, context):
         request = parse_request(context.question, self.data)
+        # A bare temperature selects the latest explicit recipe request only.
+        # Re-read authorized sources below; previous answers are never recipe data.
+        if request is None and context.history:
+            choice = re.fullmatch(r'(핫|hot|아이스|iced|ice)(?:으로|로)?(?:이요|요|해주세요|주세요)?[.!?。？！]*',
+                                  compact(context.question))
+            if choice:
+                previous = parse_request(context.history[-1].question, self.data)
+                if previous is not None and not previous.temperatures:
+                    temperature = 'HOT' if choice[1] in ('핫', 'hot') else 'ICED'
+                    request = replace(previous, temperatures=(temperature,))
         if request is None:
             return None
         started = time.monotonic()

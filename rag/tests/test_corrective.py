@@ -30,6 +30,7 @@ def test_verified_clarification_survives_without_sources():
     result = run(model, FixtureRetriever([])).result
     assert result.sources == () and result.status == 'needs_review'
     assert result.follow_up_questions == ('매장에서 만든 음료인가요, 포장 제품인가요?',)
+    assert result.answer == result.follow_up_questions[0]
     assert model.final_calls == model.verify_calls == 1
 
 
