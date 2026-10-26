@@ -93,6 +93,32 @@ def test_exact_lookup_uses_verified_source_selection_and_final_review_without_ex
     assert lookup_sources('아르바이트생 최저시급 얼마인가요?', {record.metadata.chunk_id: record}) == []
 
 
+@pytest.mark.parametrize('question', [
+    '처음 내는 돈에 교육비랑 보증금도 들어가요?',
+    '교육비에 보증금도 포함인가요?',
+    '교육비와 보증금은 각각 얼마인가요?',
+    '교육비와보증금 얼마예요?',
+    '교육비랑 보증금 얼마예요?',
+    '교육비, 보증금 납부 기한 알려줘',
+    '교육비 납부 기한도 보증금과 같은가요?',
+])
+def test_matching_table_row_does_not_complete_a_relational_or_multi_target_question(question):
+    record = reviewed_table()
+    evidence = {record.metadata.chunk_id: record}
+    assert table_rows(record)  # An available, reviewed row must not imply full coverage.
+    assert lookup_sources(question, evidence) == []
+    context = InternalQuery.model_validate(query_payload(question))
+    from app.generation.question import default_plan
+    agent = CounselAgent(Blocks([]), FixtureRetriever([record]))
+    assert agent._exact_coverage({'context': context, 'plan': default_plan(context), 'evidence': evidence}) is None
+
+
+@pytest.mark.parametrize('question', ['교육비 얼마인가요?', '교육비 납부 기한은?', '교육비 합계 얼마예요?'])
+def test_simple_table_amount_deadline_and_total_still_qualify(question):
+    record = reviewed_table()
+    assert lookup_sources(question, {record.metadata.chunk_id: record})
+
+
 def test_mixed_items_keep_literal_cells_and_prose_in_separate_scopes():
     payload = writer_payload(reviewed_table())
     payload['assessment']['items'].append(item('other-item').to_payload())

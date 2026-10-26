@@ -4,7 +4,7 @@ import re
 TABLE_BLOCK_FLAGS = frozenset({'table_needs_review', 'table_pairing_mismatch', 'table_detection_failed'})
 NO_EVIDENCE_ANSWER = '현재 접근 가능한 문서에서 이 질문을 뒷받침하는 근거를 확인하지 못했습니다. 답변은 등록된 매장 운영·가맹 자료에서 확인되는 내용으로 제한됩니다.'
 NUMBER_PATTERN = r'\d+(?:,\d{3})*(?:\.\d+)?'
-UNIT_PATTERN = r'천원|만원|억원|원|mL|ml|kg|mg|g|L|일|개월|년|시간|분|회|%'
+UNIT_PATTERN = r'천원|만원|억원|원|mL|ml|kg|mg|g|L|일|개월|년|시간|분|회|가지|%'
 
 
 def table_blocked(item):
@@ -54,7 +54,7 @@ def unsupported_numbers(draft, selected, context):
 
 
 def bind_literal_quantities(blocks, evidence):
-    """Repair metadata only for unique, explicit value/unit pairs already cited.
+    """Keep metadata for printed numbers; repair unique cited literal pairs.
 
     No new source, fact, arithmetic or unit conversion is introduced. Ambiguous
     matches and wrong values/units still go through the ordinary failure checks.
@@ -85,7 +85,14 @@ def bind_literal_quantities(blocks, evidence):
                     found.append(candidate)
             return found
         quantities = []
+        printed_numbers = number_tokens(block.text)
         for q in block.quantities:
+            # Unused provider metadata is not a public claim. Removing it cannot
+            # excuse a printed number: quantity_failures still requires every
+            # number in the final text to have a valid source/unit binding.
+            declared_numbers = number_tokens(q.value)
+            if declared_numbers and not declared_numbers <= printed_numbers:
+                continue
             probe = block.model_copy(update={'text': '', 'quantities': [q]})
             failures = set(quantity_failures(probe, units))
             candidates = matches(q) if failures == {'QUANTITY_SOURCE_MISMATCH'} and q.unit else []

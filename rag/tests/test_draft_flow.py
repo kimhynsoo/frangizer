@@ -17,6 +17,16 @@ def test_basic_counsel_has_only_draft_and_review():
     assert 'assessment' not in driver.writes[0]
 
 
+def test_rejected_numeric_draft_is_not_reported_as_missing_documents():
+    p = proposal().model_copy(update={'blocks': [block(item_id='rule', text='초기 부담 항목은 99개입니다.')]})
+    driver = Driver([p])
+    result = run(driver)
+    assert result.result.status == 'needs_review' and not result.result.sources
+    assert '99' not in result.result.answer
+    assert '답변을 확정하지 않았습니다' in result.result.answer
+    assert '문서에서 이 질문을 뒷받침하는 근거를 확인하지 못했습니다' not in result.result.answer
+
+
 def test_item_sources_are_derived_from_its_sentences_without_a_second_model_selection():
     p = proposal()
     other = p.items[0].model_copy(update={'item_id': 'other'})

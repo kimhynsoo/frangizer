@@ -6,8 +6,12 @@ from ..errors import upstream_error
 from .evidence_policy import (NUMBER_PATTERN as NUMBER, UNIT_PATTERN as UNIT,
                               assigned_values, number_tokens, percent_notation, table_blocked)
 from .review import Quantity, Quote, source_units
+from .question import COMPARISON
 
 TOTAL = re.compile(r'합계|합산|총액|총계|소계')
+# Literal cells establish values, not membership or coverage of multiple targets.
+# Ambiguous cases use the ordinary draft/review path with the same evidence.
+RELATIONAL_LOOKUP = re.compile(r'포함|들어\s*(?:가|있)|\S+(?:와|과|랑|하고)\s*\S|(?:및|그리고)\s|[,，·]')
 
 def table_rows(item):
     """Only complete reviewed rows whose title, units and text match this chunk.
@@ -48,8 +52,12 @@ def table_rows(item):
 def lookup_sources(question, evidence):
     """Supply verified source choices for an explicitly named row or column.
 
+    Only simple lookups qualify. A matching cell is not enough to establish
+    inclusion or an answer about multiple targets, even when both rows exist.
     Selection and final question/condition verification still have to pass.
     """
+    if COMPARISON.search(question) or RELATIONAL_LOOKUP.search(question):
+        return []
     compact = lambda s: re.sub(r'\s+', '', s)
     question, refs = compact(question), []
     for item in evidence.values():
