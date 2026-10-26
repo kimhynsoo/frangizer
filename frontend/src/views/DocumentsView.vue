@@ -93,10 +93,11 @@ function submitAction() {
 }
 
 const uploadFormKey = ref(0);
-const form = ref({
+// 새 판본 등록 대상 문서. null이면 새 문서 등록(문서 ID는 서버가 만든다).
+const versionTarget = ref(null);
+const blankForm = () => ({
   title: "",
   version: "",
-  document_id: "",
   category: "recipe",
   material_type: "synthetic",
   visibility: "owner",
@@ -112,6 +113,7 @@ const form = ref({
   exclude_pages: "",
   legal_temporal_reviewed: false,
 });
+const form = ref(blankForm());
 const categories = {
   franchise: "가맹 준비",
   recipe: "레시피",
@@ -188,16 +190,79 @@ async function openHistory(row, page = 1) {
       historyBusy.value = false;
   }
 }
-function startUpload() {
-  showUpload.value = true;
+function openUploadForm(target, values) {
+  versionTarget.value = target;
+  form.value = { ...blankForm(), ...values };
+  file.value = null;
   uploadKey.value = null;
+  uploadFormKey.value++;
   error.value = null;
   success.value = "";
+  showUpload.value = true;
+}
+function startUpload() {
+  openUploadForm(null, {});
+}
+// 기존 문서의 새 판본: 문서를 고정하고 현재 판본의 제목·분류·열람 범위·출처를 미리 채운다.
+async function startNewVersion(row) {
+  if (saving.value) return;
+  error.value = null;
+  let current = null;
+  try {
+    const result = await api.versions(row.document_id, {
+      page: 1,
+      page_size: 100,
+    });
+    const currentId = currentVersions.value[row.document_id];
+    current =
+      result.data.find((v) => v.version_id === currentId) ||
+      result.data[0] ||
+      null;
+  } catch (e) {
+    error.value = e;
+    retry.value = () => startNewVersion(row);
+    return;
+  }
+  const base = current || row;
+  const source = base.original_source || {};
+  openUploadForm(
+    {
+      document_id: row.document_id,
+      title: base.title || row.title,
+      version: base.version || row.selected_version,
+      effective_from: base.effective_from || row.effective_from,
+      visibility: base.visibility,
+    },
+    {
+      title: base.title || row.title,
+      category: base.category || row.category || "recipe",
+      material_type: base.material_type || row.material_type || "synthetic",
+      visibility: base.visibility || "owner",
+      publisher: source.publisher || "",
+      source_title: source.title || "",
+      source_url: source.url || "",
+      note: source.note || "",
+    },
+  );
+}
+function newVersionFromHistory() {
+  const row = selected.value;
+  closeHistory();
+  startNewVersion(row);
 }
 async function fillRecipeDemo() {
   if (saving.value) return;
   const { uploadPreset } = await import("../demo/materials.js");
-  form.value = uploadPreset();
+  const { document_id, ...preset } = uploadPreset();
+  form.value = { ...blankForm(), ...preset };
+  if (document_id)
+    versionTarget.value = {
+      document_id,
+      title: preset.title,
+      version: null,
+      effective_from: null,
+      visibility: preset.visibility,
+    };
   file.value = null;
   uploadKey.value = null;
   uploadFormKey.value++;
@@ -230,8 +295,8 @@ async function upload(reuse = false) {
   const metadata = {
     title: form.value.title.trim(),
     version: form.value.version.trim(),
-    ...(form.value.document_id.trim()
-      ? { document_id: form.value.document_id.trim() }
+    ...(versionTarget.value
+      ? { document_id: versionTarget.value.document_id }
       : {}),
     category: form.value.category,
     material_type: form.value.material_type,
@@ -258,7 +323,9 @@ async function upload(reuse = false) {
     await api.upload(file.value, metadata, uploadKey.value);
     showUpload.value = false;
     file.value = null;
-    success.value = "문서를 초안으로 등록했습니다. 검수 후 승인해 주세요";
+    success.value = versionTarget.value
+      ? `${versionTarget.value.title} v${metadata.version} 문서를 초안으로 등록했습니다. 검수 후 승인해 주세요`
+      : "문서를 초안으로 등록했습니다. 검수 후 승인해 주세요";
     uploadKey.value = null;
     await load();
   } catch (e) {
@@ -437,6 +504,14 @@ onUnmounted(() => {
                 <button class="button small ghost" @click="openHistory(row)">
                   판본 보기<ArrowUpRight :size="14" />
                 </button>
+                <button
+                  v-if="management"
+                  class="button small secondary"
+                  :disabled="saving"
+                  @click="startNewVersion(row)"
+                >
+                  <Plus :size="14" />새 판본
+                </button>
               </td>
             </tr>
           </tbody>
@@ -470,6 +545,14 @@ onUnmounted(() => {
             <span class="eyebrow">VERSION HISTORY</span>
             <h2 id="history-title">{{ selected.title }} · 판본 이력</h2>
           </div>
+          <button
+            v-if="management"
+            class="button small secondary"
+            :disabled="saving"
+            @click="newVersionFromHistory"
+          >
+            <Plus :size="14" />새 판본 등록
+          </button>
           <button
             class="icon-button"
             aria-label="판본 이력 닫기"
@@ -573,7 +656,9 @@ onUnmounted(() => {
         aria-labelledby="upload-title"
       >
         <div class="panel-heading">
-          <span class="eyebrow">NEW DOCUMENT VERSION</span
+          <span class="eyebrow">{{
+            versionTarget ? "NEW VERSION" : "NEW DOCUMENT"
+          }}</span
           ><button
             class="icon-button"
             aria-label="문서 등록 닫기"
@@ -583,8 +668,36 @@ onUnmounted(() => {
             ✕
           </button>
         </div>
-        <h2 id="upload-title">새 문서 또는 판본 등록</h2>
-        <p class="muted">등록된 문서는 검수·승인 후 배포할 수 있습니다.</p>
+        <h2 id="upload-title">
+          {{
+            versionTarget
+              ? `${versionTarget.title} · 새 판본 등록`
+              : "새 문서 등록"
+          }}
+        </h2>
+        <div v-if="versionTarget" class="info-banner version-target">
+          <span>
+            <template v-if="versionTarget.version"
+              >현재 v{{ versionTarget.version }} ·
+              {{
+                new Date(versionTarget.effective_from).toLocaleString("ko-KR", {
+                  timeZone: "Asia/Seoul",
+                })
+              }}부터 적용 중.
+            </template>
+            배포하면 현재 판본은 새 판본의 적용 시각에 끝나고 새 판본으로
+            바뀝니다.
+            {{
+              versionTarget.visibility === "hq"
+                ? "본사 전용 문서라 매장 공지는 만들지 않습니다."
+                : "운영 점주에게 변경 공지가 갑니다."
+            }}
+          </span>
+        </div>
+        <p v-else class="muted">
+          기존 문서를 바꾸는 경우에는 문서 목록의 "새 판본" 버튼을 사용하세요.
+          여기서 등록하면 별도의 새 문서가 됩니다.
+        </p>
         <div v-if="isMock" class="demo-upload-help">
           <button
             type="button"
@@ -629,13 +742,11 @@ onUnmounted(() => {
                 v-model="form.version"
                 required
                 maxlength="50"
-                placeholder="예: 1.2" /></label
-            ><label
-              >기존 문서 ID <small>새 문서면 비워두세요</small
-              ><input
-                v-model="form.document_id"
-                maxlength="100"
-                pattern="[A-Za-z0-9][A-Za-z0-9._-]*" /></label
+                :placeholder="
+                  versionTarget?.version
+                    ? `현재 v${versionTarget.version}보다 새 버전`
+                    : '예: 1.2'
+                " /></label
             ><label
               >분류<select v-model="form.category">
                 <option
