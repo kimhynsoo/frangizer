@@ -195,3 +195,101 @@ it("판본 조회 실패는 팝업 안에 원인과 다시 시도 버튼을 표�
   expect(dialog.text()).toContain("다시 시도");
   wrapper.unmount();
 });
+
+const recipeRow = {
+  document_id: "demo-cafe-recipes",
+  title: "카페 표준 레시피 북 (합성)",
+  selected_version: "1.0",
+  selected_version_id: "demo-cafe-recipes-1.0",
+  lifecycle: "published",
+  index_status: "ready",
+  category: "recipe",
+  effective_from: "2026-10-01T00:00:00+09:00",
+};
+async function fillAndSubmit(wrapper, version) {
+  const set = (selector, value) => wrapper.get(selector).setValue(value);
+  const file = wrapper.get('input[type="file"]');
+  Object.defineProperty(file.element, "files", {
+    value: [new File(["pdf"], "v.pdf", { type: "application/pdf" })],
+    configurable: true,
+  });
+  await file.trigger("change");
+  await set('input[type="datetime-local"]', "2026-10-26T12:00");
+  for (const input of wrapper.findAll("form.upload-form input[required]"))
+    if (!input.element.value && input.attributes("type") !== "file")
+      await input.setValue(
+        input.attributes("type") === "date" ? "2026-10-26" : "값",
+      );
+  await set('input[maxlength="50"]', version);
+  await wrapper.get("form.upload-form").trigger("submit");
+  await flushPromises();
+}
+it("문서 줄의 새 판본은 문서를 고정하고 현재 판본 값을 채워 같은 문서로 등록한다", async () => {
+  list.mockResolvedValue({
+    data: [recipeRow],
+    meta: { page: 1, total_pages: 1, total: 1 },
+  });
+  versions.mockResolvedValue({
+    data: [
+      {
+        ...recipeRow,
+        version_id: "demo-cafe-recipes-1.0",
+        version: "1.0",
+        material_type: "synthetic",
+        visibility: "owner",
+        original_source: {
+          title: "합성 레시피",
+          publisher: "프로젝트 팀",
+          url: null,
+          note: "합성",
+        },
+      },
+    ],
+    meta: { page: 1, total_pages: 1, total: 1 },
+  });
+  upload.mockReset().mockResolvedValue({});
+  const wrapper = mount(DocumentsView, {
+    global: { directives: { "focus-trap": {} } },
+  });
+  await flushPromises();
+  await wrapper
+    .findAll("button")
+    .find((b) => b.text() === "새 판본")
+    .trigger("click");
+  await flushPromises();
+  const dialog = wrapper.get('[aria-labelledby="upload-title"]');
+  expect(dialog.text()).toContain("카페 표준 레시피 북 (합성) · 새 판본 등록");
+  expect(dialog.text()).toContain("현재 v1.0");
+  expect(dialog.text()).not.toContain("기존 문서 ID");
+  await fillAndSubmit(wrapper, "1.1");
+  const metadata = upload.mock.calls[0][1];
+  expect(metadata.document_id).toBe("demo-cafe-recipes");
+  expect(metadata.title).toBe("카페 표준 레시피 북 (합성)");
+  expect(metadata.visibility).toBe("owner");
+  expect(metadata.original_source.publisher).toBe("프로젝트 팀");
+  wrapper.unmount();
+});
+it("상단 문서 등록은 문서 ID 없이 새 문서로 등록한다", async () => {
+  list.mockResolvedValue({
+    data: [recipeRow],
+    meta: { page: 1, total_pages: 1, total: 1 },
+  });
+  upload.mockReset().mockResolvedValue({});
+  const wrapper = mount(DocumentsView, {
+    global: { directives: { "focus-trap": {} } },
+  });
+  await flushPromises();
+  await wrapper
+    .findAll("button")
+    .find((b) => b.text() === "문서 등록")
+    .trigger("click");
+  await flushPromises();
+  expect(wrapper.get('[aria-labelledby="upload-title"]').text()).toContain(
+    "새 문서 등록",
+  );
+  await wrapper.get('input[maxlength="200"]').setValue("새 위생 안내");
+  await fillAndSubmit(wrapper, "1.0");
+  expect(upload).toHaveBeenCalledTimes(1);
+  expect(upload.mock.calls[0][1]).not.toHaveProperty("document_id");
+  wrapper.unmount();
+});
