@@ -1,5 +1,13 @@
 import { expect, it } from "vitest";
 import { cleanAnswerText, spokenAnswer } from "../src/api/spoken-answer";
+it("저장된 답변의 시행일 검수 표시는 숨기고 실제 적용 조건은 유지한다", () => {
+  const answer =
+    "[시행일 미검수] 인용 자료의 조문별 시행일 검수가 완료되지 않았습니다. 계약 전 정보공개서를 확인하세요. 적용 여부는 추가 확인이 필요합니다.";
+  const expected =
+    "계약 전 정보공개서를 확인하세요. 적용 여부는 추가 확인이 필요합니다.";
+  expect(cleanAnswerText(answer)).toBe(expected);
+  expect(spokenAnswer({ answer, status: "needs_review" })).toBe(expected);
+});
 it("반복 시연 안내와 내부 지시문을 빼고 제조 내용을 먼저 읽는다", () => {
   const answer =
     "합성 시연 레시피 기준입니다. 도구 사용은 종료하고, 확보한 근거 조각 ID만 사용해 최종 초안을 정리합니다. 바닐라 시럽 20 mL와 에스프레소 60 mL를 먼저 섞습니다.";

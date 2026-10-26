@@ -64,7 +64,7 @@ def test_index_queue_is_bounded(make_request, roots, embedder):
                            headers={'X-Internal-Token': AUTH.internal_token}).status_code == 503
 
 
-def test_real_artifact_retrieval_and_answer_warning(make_request, roots, embedder, contract):
+def test_real_artifact_retrieval_keeps_review_metadata_out_of_answer(make_request, roots, embedder, contract):
     req = make_request()
     job = create_index(req, roots, embedder)
     context = context_for(req, job)
@@ -75,7 +75,8 @@ def test_real_artifact_retrieval_and_answer_warning(make_request, roots, embedde
     model = ScriptedModel(final=draft(used_chunk_ids=[cid]))
     response = asyncio.run(CounselAgent(model, retriever).run(context))
     contract('InternalAnswer', response.model_dump(mode='json'))
-    assert '[시행일 미검수]' in response.result.answer
+    assert '[시행일 미검수]' not in response.result.answer
+    assert '조문별 시행일 검수가 완료되지 않았습니다' not in response.result.answer
     assert response.result.sources[0].version_id == job['version_id']
     read = asyncio.run(retriever.read_sections((cid,), context))
     assert cid in [item.metadata.chunk_id for item in read.items]

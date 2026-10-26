@@ -168,7 +168,7 @@ python3 rag/scripts/dev_reindex.py --document-id paik-franchise-disclosure --app
 - 서비스는 **단일 worker**, 색인 동시 실행 1개·대기 포함 최대 16개입니다. 같은 작업 ID와 다른 내용은409, 과부하는503입니다. 재시작 시 남은 queued/running은 failed + `INTERRUPTED`가 됩니다. 새 job_id로 다시 요청해야 합니다.
 - 검색은 Java가 전달한 `(document_id, version_id, index_revision)`에만 접근합니다. 브랜드·역할·조각 적용 기간을 **유사도 순위 계산 전에** 제한합니다. 허용 범위를 자동으로 넓히지 않습니다.
 - 모델·차원·정규화 방식·본문 해시·조각 매핑을 검사합니다. pickle을 읽지 않습니다. 주요 검색 결과와 필요한 문맥은 최대20조각·12,000자로 제한합니다. 본문 밖의 후보 목록도 같은 권한·해시 검사를 통과해야 하며, 원문 조회는 후보의 부모 또는 명시된 참조 조항으로 제한합니다.
-- `legal_temporal_reviewed=false`인 공식 자료를 인용하면 `[시행일 미검수]`를 답변 앞에 붙입니다. 표의 `table_needs_review` 또는 `table_pairing_mismatch` 경고가 있는 출처로는 수치를 확정 답변하지 않고 `needs_review`로 반환합니다. OCR·법률적 정확성 평가는 별도로 필요합니다.
+- `legal_temporal_reviewed=false`는 색인 내부 검수 정보로 유지하며 답변 앞에 검수 표시를 붙이지 않습니다. 이 표시를 생략해도 시행일 검수가 완료된 것으로 처리하지 않습니다. 표의 `table_needs_review` 또는 `table_pairing_mismatch` 경고가 있는 출처로는 수치를 확정 답변하지 않고 `needs_review`로 반환합니다. OCR·법률적 정확성 평가는 별도로 필요합니다.
 
 ## 레시피의 생성 없는 응답
 

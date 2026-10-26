@@ -7,7 +7,12 @@ const sentences = (text) =>
 const internal =
   /^(?:도구\s*사용(?:은|을)?\s*종료하고|확보한\s*근거\s*조각\s*ID만\s*사용해\s*최종\s*초안을)/i;
 export function cleanAnswerText(text) {
-  return sentences(text)
+  return sentences(
+    String(text || "").replace(
+      /\[시행일 미검수\]\s*(?:인용 자료의 조문별 시행일 검수가 완료되지 않았습니다\.\s*)?/g,
+      "",
+    ),
+  )
     .filter(
       (line) =>
         !internal.test(line) &&
