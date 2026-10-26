@@ -5,7 +5,6 @@ import {
   Square,
   ArrowUp,
   X,
-  BookOpen,
   Volume2,
   VolumeX,
 } from "@lucide/vue";
@@ -234,9 +233,6 @@ onUnmounted(() => {
     <p v-if="error" class="error-notice" role="alert">{{ error }}</p>
     <div class="composer-footer">
       <slot name="hands-free" />
-      <div class="composer-options">
-        <span><BookOpen :size="14" />문서 기반 답변</span>
-      </div>
       <div class="composer-controls">
         <button
           v-if="allowReadAloud && readingAnswer"
