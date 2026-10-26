@@ -95,6 +95,70 @@ it("호출어와 함께 말한 질문은 재녹음 없이 한 번 전송한다",
   session.stop();
   await running;
 });
+it("음성 질문의 핫·아이스 확인은 호출어 없이 바로 듣고 같은 흐름으로 전송한다", async () => {
+  vi.useFakeTimers();
+  const clarification = {
+    status: "needs_review",
+    answer: "HOT과 ICED 중 어느 레시피인가요?",
+    follow_up_questions: ["HOT과 ICED 중 어느 레시피인가요?"],
+  };
+  const ask = vi
+    .fn()
+    .mockResolvedValueOnce(clarification)
+    .mockResolvedValueOnce({
+      status: "answered",
+      answer: "아이스는 시럽 두 펌프예요.",
+      follow_up_questions: [],
+    });
+  const listen = vi
+    .fn()
+    .mockResolvedValueOnce("시리 바닐라라테 레시피 알려 줘")
+    .mockResolvedValueOnce("차가운 걸로 해 줘")
+    .mockImplementation(pendingListen);
+  const { session, speak, state } = setup({ ask, listen });
+  const running = session.start();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(ask.mock.calls.map(([question]) => question)).toEqual([
+    "바닐라라테 레시피 알려 줘",
+    "아이스",
+  ]);
+  expect(speak.mock.calls.map(([text]) => text)).toEqual([
+    "HOT과 ICED 중 어느 레시피인가요?",
+    "아이스는 시럽 두 펌프예요.",
+  ]);
+  expect(state.mock.calls.map(([value]) => value)).toContain("question");
+  session.stop();
+  await running;
+});
+it("일반 후속 질문도 호출어 없이 답을 바로 듣는다", async () => {
+  vi.useFakeTimers();
+  const ask = vi
+    .fn()
+    .mockResolvedValueOnce({
+      status: "needs_review",
+      answer: "어느 지역의 매장인가요?",
+      follow_up_questions: ["어느 지역의 매장인가요?"],
+    })
+    .mockResolvedValueOnce({
+      status: "answered",
+      answer: "서울 지역 기준을 안내할게요.",
+      follow_up_questions: [],
+    });
+  const listen = vi
+    .fn()
+    .mockResolvedValueOnce("시리 위생 기준 알려 줘")
+    .mockResolvedValueOnce("서울이야")
+    .mockImplementation(pendingListen);
+  const { session } = setup({ ask, listen });
+  const running = session.start();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(ask.mock.calls.map(([question]) => question)).toEqual([
+    "위생 기준 알려 줘",
+    "서울이야",
+  ]);
+  session.stop();
+  await running;
+});
 it("일반 대화는 질문 API로 보내지 않는다", async () => {
   vi.useFakeTimers();
   const listen = vi

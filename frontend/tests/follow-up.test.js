@@ -19,6 +19,7 @@ vi.mock("../src/api/voice", () => ({
 import AskChat from "../src/components/AskChat.vue";
 import AnswerDetails from "../src/components/AnswerDetails.vue";
 import VoiceInput from "../src/components/VoiceInput.vue";
+import HandsFreeVoice from "../src/components/HandsFreeVoice.vue";
 const prompt = "HOT과 ICED 중 어느 레시피인가요?";
 const clarification = {
   question_id: "q1",
@@ -86,7 +87,31 @@ it("핫 버튼은 새 대화가 아닌 기존 conversation_id로 보내며 응�
   expect(wrapper.text()).toContain("PDF 5쪽");
   expect(wrapper.find(".follow-up-choices").exists()).toBe(false);
 });
-it("음성으로 입력한 아이스도 같은 대화로 전달한다", async () => {
+it("음성 대기 중에도 온도 선택 버튼으로 후속 질문을 보낸다", async () => {
+  await initial();
+  const handsFree = wrapper.findComponent(HandsFreeVoice);
+  handsFree.vm.$emit("enabled", true);
+  handsFree.vm.$emit("listening", true);
+  await flushPromises();
+  const hot = wrapper.findAll(".follow-up-choices button")[0];
+  expect(hot.element.disabled).toBe(false);
+  m.ask.mockResolvedValueOnce({
+    data: {
+      ...clarification,
+      question_id: "q2",
+      status: "answered",
+      answer: "핫 레시피입니다.",
+      follow_up_questions: [],
+    },
+  });
+  await hot.trigger("click");
+  await flushPromises();
+  expect(m.ask.mock.calls[1][0]).toEqual({
+    question: "핫",
+    conversation_id: "same-conversation",
+  });
+});
+it("음성으로 말한 자연어 온도도 정규화해 같은 대화로 전달한다", async () => {
   await initial();
   m.ask.mockResolvedValueOnce({
     data: {
@@ -99,7 +124,7 @@ it("음성으로 입력한 아이스도 같은 대화로 전달한다", async ()
   });
   wrapper
     .findComponent(VoiceInput)
-    .vm.$emit("confirmed", { text: "아이스", readAnswer: false });
+    .vm.$emit("confirmed", { text: "차가운 걸로 해 줘", readAnswer: false });
   await flushPromises();
   expect(m.ask.mock.calls[1][0]).toEqual({
     question: "아이스",
