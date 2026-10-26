@@ -143,7 +143,13 @@ def quantity_failures(block, units):
             codes.append('QUANTITY_SOURCE_MISMATCH')
         # A unit must match, rather than treating '원' as interchangeable with
         # '천원'. Only explicit local value/unit pairs or table unit headers count.
-        paired = re.findall(re.escape(q.value.replace(',', '')) + r'\s*(' + UNIT_PATTERN + r')', text.replace(',', ''))
+        # Include the declared unit in literal matching: a source may say both
+        # '10곳' and '10가지'. The fixed vocabulary must not turn the latter into
+        # evidence that the former has the wrong unit. Known units stay first so
+        # '원' cannot consume '천원', or 'm' consume 'mL'.
+        unit_pattern = UNIT_PATTERN + ('|' + re.escape(unit) if unit else '')
+        paired = re.findall(r'(?<![\d.])' + re.escape(q.value.replace(',', ''))
+                            + r'\s*(' + unit_pattern + r')', text.replace(',', ''))
         headers = re.findall(r'단위\s*[:：]\s*(' + UNIT_PATTERN + r')', context_text)
         if unit and (paired or headers) and unit not in (paired or headers):
             codes.append('QUANTITY_UNIT_MISMATCH')

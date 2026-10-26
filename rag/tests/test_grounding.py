@@ -37,6 +37,34 @@ def test_category_count_is_bound_only_when_explicitly_present_in_cited_source():
     assert 'MISSING_QUANTITY_BINDING' in quantity_failures(result, evidence_units({e.metadata.chunk_id: e}))
 
 
+@pytest.mark.parametrize('value,unit,text', [
+    ('10', '곳', '인근 10곳의 점포 정보를 확인합니다.'),
+    ('10', '명', '참석자 10명으로 운영합니다.'),
+])
+def test_literal_unit_is_not_overruled_by_same_number_in_another_source_phrase(value, unit, text):
+    from app.generation.evidence_policy import quantity_failures
+    from app.generation.review import evidence_units
+    e = source(text + '\n안내서 제목: 창업 전에 알아야 할 10가지 필수사항')
+    b = block(text=text, quantities=[Quantity(label='대상 수', value=value, unit=unit, evidence_ref=ref())])
+    assert not quantity_failures(b, evidence_units({e.metadata.chunk_id: e}))
+
+
+@pytest.mark.parametrize('source_text,value,unit', [
+    ('인근 점포 10곳과 안내서 10가지', '11', '곳'),
+    ('인근 점포 10곳과 안내서 10가지', '10', '명'),
+    ('비용은 10천원이며 안내 항목은 10가지', '10', '원'),
+    ('용량은 10mL이며 안내 항목은 10가지', '10', 'm'),
+    ('점검 기간은 110일입니다.', '10', '일'),
+])
+def test_declared_unit_matching_does_not_approve_wrong_values_units_or_numeric_substrings(source_text, value, unit):
+    from app.generation.evidence_policy import quantity_failures
+    from app.generation.review import evidence_units
+    e = source(source_text)
+    b = block(text=f'확인 값은 {value}{unit}입니다.', quantities=[
+        Quantity(label='확인 값', value=value, unit=unit, evidence_ref=ref())])
+    assert quantity_failures(b, evidence_units({e.metadata.chunk_id: e}))
+
+
 def test_unused_quantity_metadata_cannot_reject_an_otherwise_grounded_explanation():
     e = source('교육비와 이행보증금은 최초 부담에 포함됩니다.')
     p = proposal().model_copy(update={'blocks': [block(item_id='rule', text=e.text, quantities=[
