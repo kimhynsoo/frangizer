@@ -22,6 +22,8 @@ import com.frangizer.auth.AuthUser;
 import com.frangizer.common.Api;
 import com.frangizer.common.ApiException;
 import com.frangizer.common.Idempotency;
+import com.frangizer.common.RagUsage;
+import com.frangizer.common.TokenPricing;
 import com.frangizer.rag.RagController.AskRequest;
 
 import tools.jackson.databind.JsonNode;
@@ -44,13 +46,16 @@ public class RagService {
     private final RagClient rag;
     private final ObjectMapper json;
     private final TransactionTemplate tx;
+    private final TokenPricing pricing;
 
-    RagService(JdbcClient db, Idempotency idem, RagClient rag, ObjectMapper json, TransactionTemplate tx) {
+    RagService(JdbcClient db, Idempotency idem, RagClient rag, ObjectMapper json, TransactionTemplate tx,
+               TokenPricing pricing) {
         this.db = db;
         this.idem = idem;
         this.rag = rag;
         this.json = json;
         this.tx = tx;
+        this.pricing = pricing;
     }
 
     public ResponseEntity<Object> ask(AuthUser user, String token, String key, AskRequest req) {
@@ -74,7 +79,10 @@ public class RagService {
         Optional<Idempotency.Entry> prior = idem.find(user.id(), OP, key);
         if (prior.isPresent()) {
             if (!prior.get().requestHash().equals(hash)) throw Idempotency.conflict();
-            if (prior.get().response() != null) return idem.replay(prior.get());
+            if (prior.get().response() != null) {
+                RagUsage.reused(prior.get().resourceId()).record();
+                return idem.replay(prior.get());
+            }
             questionId = prior.get().resourceId();
             String current = db.sql("SELECT answer_status FROM question_events WHERE question_id = :q")
                     .param("q", questionId).query(String.class).single();
@@ -150,6 +158,12 @@ public class RagService {
 
         long started = System.nanoTime();
         JsonNode data = rag.query(token, body);
+        // 토큰은 응답 검증 전에 기록한다. 결과가 거부돼도 이미 사용한 토큰이기 때문이다.
+        ObjectNode usage = data.path("usage") instanceof ObjectNode u ? u.deepCopy() : json.createObjectNode();
+        RagUsage spent = RagUsage.of(questionId, usage, data.path("retrieval"), null);
+        Double cost = pricing.estimate(spent.inputTokens(), spent.outputTokens(), spent.embeddingTokens());
+        if (cost != null) usage.put("estimated_cost_usd", cost);
+        RagUsage.of(questionId, usage, data.path("retrieval"), cost).record();
         ObjectNode result = checkResult(data.path("result"), allowedIds);
         int latency = (int) ((System.nanoTime() - started) / 1_000_000);
         result.put("question_id", questionId);
@@ -164,7 +178,7 @@ public class RagService {
         String topic = cls.path("topic_id").isString() ? cls.path("topic_id").asString() : null;
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("scope_revision", data.path("scope_revision"));
-        meta.put("usage", data.path("usage"));
+        meta.put("usage", usage);
         meta.put("retrieval", data.path("retrieval"));
         Map<String, Object> response = Api.ok(result);
         tx.executeWithoutResult(s -> {

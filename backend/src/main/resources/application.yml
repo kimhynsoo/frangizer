@@ -33,3 +33,8 @@ app:
   document-store-dir: ${DOCUMENT_STORE_DIR:/var/lib/frangizer}
   # 비어 있으면 시연 계정 비밀번호를 설정하지 않는다(로그인 불가)
   demo-password: ${DEMO_PASSWORD:}
+  # 100만 토큰당 단가(USD). 요청 로그의 cost_usd와 rag_meta.usage.estimated_cost_usd에 쓴다. 0이면 비용을 계산하지 않는다.
+  pricing:
+    input-per-1m: ${LLM_PRICE_INPUT_PER_1M:0}
+    output-per-1m: ${LLM_PRICE_OUTPUT_PER_1M:0}
+    embedding-per-1m: ${EMBEDDING_PRICE_PER_1M:0}
