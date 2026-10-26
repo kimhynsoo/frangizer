@@ -209,3 +209,26 @@ def test_backend_style_request_is_accepted(make_request, roots, embedder, contra
     assert "include_pages" not in req["indexing_policy"]
     contract("IndexJobRequest", req)
     assert run(req, roots, embedder)["status"] == "succeeded"
+
+
+def test_search_context_is_embedded_separately_from_citation_text(make_request, roots):
+    import hashlib
+    from app.indexing.job import validate_revision, IndexJobFailed
+    from app.indexing.models import IndexJobRequest
+    class Capture(FakeEmbedder):
+        def embed(self, texts):
+            self.inputs = list(texts)
+            return super().embed(texts)
+    req = make_request()
+    model = Capture()
+    job = run(req, roots, model)
+    records = read_chunks(roots, job['index_revision'])
+    assert model.inputs == [r['search_text'] for r in records]
+    assert any(r['search_text'] != r['text'] for r in records)
+    assert all(hashlib.sha256(r['text'].encode()).hexdigest() == r['metadata']['content_sha256'] for r in records)
+    assert all(hashlib.sha256(r['search_text'].encode()).hexdigest() == r['search_sha256'] for r in records)
+    directory = roots[1] / 'revisions' / job['index_revision']
+    records[0]['search_text'] += '허위 검색 문맥'
+    (directory/'chunks.jsonl').write_text('\n'.join(json.dumps(r, ensure_ascii=False) for r in records)+'\n')
+    with pytest.raises(IndexJobFailed):
+        validate_revision(directory, IndexJobRequest.model_validate(req), job['index_revision'])

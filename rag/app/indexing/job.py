@@ -30,6 +30,7 @@ from .extract import ExtractionError, extract_pdf, extract_text
 from .table_transcription import apply_reviews, load_reviews
 from .models import IndexedChunkMetadata, IndexJob, IndexJobRequest
 from .tables import extraction_signature
+from ..structure import infer_hierarchy, search_text
 
 KST = timezone(timedelta(hours=9))
 
@@ -226,8 +227,10 @@ def chunk_id(rev, section_key):
 RECORD_FORMAT = {
     "metadata": "IndexedChunkMetadata (계약, 추가 필드 없음)",
     "heading": "섹션 제목(조 제목·쪽 첫 줄). 나눈 조각은 본문 첫 줄에도 '(이어서)'로 반복",
-    "text": "임베딩 입력 = 이 값 그대로. content_sha256 = sha256(text, UTF-8)",
-    "table": "선택: 로컬 추출 표의 셀·주변 설명·추출기·source/table SHA·검수 상태. 계약 metadata와 분리",
+    "text": "인용 원문. content_sha256 = sha256(text, UTF-8)",
+    "search_text": "상위 문맥과 원문을 결합한 임베딩 입력. search_sha256로 별도 검증",
+    "hierarchy": "원문 위치별 상위 제목 및 제목의 source chunk ID. 법적 업종 분류를 추정하지 않음",
+    "table": "reviewed-cells-v1: 선택. 검수 표의 columns·rows·unit·제목·주변 설명. 원문 대조 후 사용. 계약 metadata와 분리",
     "section": "parent_section_key·part·parts·pages — 같은 parent의 part 1..parts를 이어 붙이면 원문 섹션",
     "review": "legal_temporal_reviewed(문서 단위), period_source(document|future_trailer), temporal_note, "
               "quality_flags(조각이 걸친 쪽의 추출 경고: table_needs_review 등)",
@@ -261,6 +264,11 @@ def _chunk_records(req, chunks, rev, embedding_model, page_flags=None):
                        "period_source": "future_trailer" if (c.effective_from or c.effective_until) else "document",
                        "temporal_note": c.temporal_note, "quality_flags": flags},
         })
+    hierarchy = infer_hierarchy(records)
+    for record in records:
+        record['hierarchy'] = hierarchy[record['metadata']['chunk_id']]
+        record['search_text'] = search_text(record['text'], record['hierarchy'])
+        record['search_sha256'] = hashlib.sha256(record['search_text'].encode()).hexdigest()
     return records
 
 
@@ -278,6 +286,8 @@ def validate_revision(rev_dir: Path, req: IndexJobRequest, rev: str):
     if not np.isfinite(vectors).all():
         raise IndexJobFailed("INDEX_VALIDATION_FAILED", "유한하지 않은 벡터 값")
     ids = set()
+    records = [json.loads(line) for line in lines]
+    expected_hierarchy = infer_hierarchy(records)
     for line in lines:
         rec = json.loads(line)
         try:
@@ -291,6 +301,11 @@ def validate_revision(rev_dir: Path, req: IndexJobRequest, rev: str):
             raise IndexJobFailed("INDEX_VALIDATION_FAILED", "판본 연결 불일치")
         if hashlib.sha256(rec["text"].encode()).hexdigest() != meta.content_sha256:
             raise IndexJobFailed("INDEX_VALIDATION_FAILED", f"본문 해시 불일치: {meta.chunk_id}")
+        if build.get('chunker_version') == 'chunker-v6-context':
+            expected = expected_hierarchy[meta.chunk_id]
+            if (rec.get('hierarchy') != expected or rec.get('search_text') != search_text(rec['text'], expected)
+                    or rec.get('search_sha256') != hashlib.sha256(rec['search_text'].encode()).hexdigest()):
+                raise IndexJobFailed('INDEX_VALIDATION_FAILED', '검색 문맥/입력 해시 불일치')
     if build["chunk_ids"] != [json.loads(l)["metadata"]["chunk_id"] for l in lines]:
         raise IndexJobFailed("INDEX_VALIDATION_FAILED", "벡터-조각 순서 매핑 불일치")
 
@@ -309,7 +324,7 @@ def write_revision(index_root: Path, req, chunks, report, embedder, rev):
         page_flags = {p["page"]: p["flags"] for p in report["pages"]}
         records = _chunk_records(req, chunks, rev, embedder.model, page_flags)
         try:
-            vectors = np.asarray(embedder.embed([r["text"] for r in records]), dtype="float32")
+            vectors = np.asarray(embedder.embed([r["search_text"] for r in records]), dtype="float32")
         except EmbeddingError:
             raise
         except Exception as e:
@@ -330,7 +345,8 @@ def write_revision(index_root: Path, req, chunks, report, embedder, rev):
             "source_sha256": req.source.sha256, "indexing_policy": req.indexing_policy.model_dump(mode="json", exclude_unset=True),
             "chunker_version": CHUNKER_VERSION, "embedding_model": embedder.model, "dimension": embedder.dim,
             "metric": "inner_product_on_l2_normalized", "normalization": "L2 (질문 벡터도 L2 정규화 후 내적 = 코사인)",
-            "embedding_input": "chunks.jsonl의 text 그대로", "content_sha256": "sha256(text, UTF-8)",
+            "embedding_input": "chunks.jsonl의 search_text (source hierarchy + original text)",
+            "content_sha256": "sha256(text, UTF-8)", "search_sha256": "sha256(search_text, UTF-8)",
             "record_format": RECORD_FORMAT, "chunk_count": len(records),
             "chunk_ids": [r["metadata"]["chunk_id"] for r in records], "created_at": _now().isoformat(),
         }

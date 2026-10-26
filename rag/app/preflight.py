@@ -48,6 +48,8 @@ def check_config(config, *, target='local', service='all'):
     add(bool(key) and '...' not in key and not any(s in key for s in ('실제_API_키', '여기에_', 'changeme')),
         'LLM_API_KEY', 'API 키 입력·자리표시자 여부만 확인; API 인증은 검사하지 않음')
     model = value('LLM_MODEL')
+    add(value('RAG_REVIEW_MODE', 'always') in ('adaptive', 'always'), 'RAG_REVIEW_MODE',
+        'always: 모든 생성 상담 검수; adaptive는 같은 동작의 이전 설정명(폐기 예정)')
     add(bool(model) and not model.startswith('sk-') and '...' not in model and not any(c.isspace() for c in model),
         'LLM_MODEL', 'API 키가 아닌 모델 ID 필요; 계정별 모델 접근은 별도 확인')
     model = value('EMBEDDING_MODEL')

@@ -87,3 +87,8 @@ def test_rag_container_does_not_require_backend_credentials(config):
     for key in ('DB_URL','DB_USERNAME','DB_PASSWORD','DEMO_PASSWORD','RAG_URL'):
         config.pop(key)
     assert not errors(config, target='docker', service='rag')
+
+
+def test_unknown_review_mode_is_rejected(config):
+    config['RAG_REVIEW_MODE'] = 'disabled'
+    assert 'RAG_REVIEW_MODE' in errors(config)
