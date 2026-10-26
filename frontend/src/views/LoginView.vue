@@ -2,7 +2,6 @@
 import { ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { ArrowRight } from "@lucide/vue";
-import CafeArtwork from "../components/CafeArtwork.vue";
 import ConnectionMark from "../components/ConnectionMark.vue";
 import { useAuth } from "../stores/auth";
 import { isMock } from "../api/client";
@@ -65,11 +64,31 @@ async function submit() {
     <section class="login-story">
       <div class="brand light">
         <span class="brand-mark"><ConnectionMark :size="24" /></span
-        ><span>프랜자이저<small>FRANGIZER WORKSPACE</small></span>
+        ><span>프랜자이저<small>FRANGIZER OPERATIONS</small></span>
       </div>
       <div class="story-content">
+        <span class="story-kicker">FRANCHISE OPERATIONS PLATFORM</span>
         <h1>가맹점주의 곁에서, <br />든든한 운영 파트너</h1>
-        <CafeArtwork />
+        <p class="story-description">
+          본사의 운영 기준과 현장의 질문을 하나의 업무 흐름으로 연결합니다.
+        </p>
+        <div class="service-modules" aria-label="프랜자이저 주요 기능">
+          <div>
+            <span>01</span>
+            <strong>운영 지식</strong>
+            <small>승인된 문서를 기준으로 확인</small>
+          </div>
+          <div>
+            <span>02</span>
+            <strong>현장 문의</strong>
+            <small>근거와 함께 필요한 답변 제공</small>
+          </div>
+          <div>
+            <span>03</span>
+            <strong>변경 관리</strong>
+            <small>공지 배포부터 점포 확인까지</small>
+          </div>
+        </div>
       </div>
     </section>
     <section class="login-form-side">
