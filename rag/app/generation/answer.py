@@ -12,6 +12,20 @@ from .review import reference_key
 from .evidence_policy import NO_EVIDENCE_ANSWER, table_blocked, unsupported_numbers
 
 
+def document_navigation(context):
+    """Return a fixed screen guide, never a fabricated document catalog."""
+    from .question import is_document_navigation
+    if not is_document_navigation(context.question):
+        return None
+    draft = Draft(answer='문서 보관함에서 자료 목록을 확인해 주세요.', steps=[], status='needs_review',
+                  used_chunk_ids=[], follow_up_questions=[], handoff_reason='문서 목록은 문서 보관함에서 조회',
+                  category='other')
+    return assemble_answer(context, draft, {}, latency_ms=0, candidate_count=0,
+        usage=Usage(input_tokens=0, output_tokens=0, embedding_tokens=0,
+                    model='not-used', embedding_model='not-used', estimated_cost_usd=None),
+        llm_called=False, no_evidence_action='document_navigation')
+
+
 def source_excerpt(item, draft):
     """Return selected original units, with explicit elisions when API space is short."""
     from .review import source_units
@@ -53,7 +67,16 @@ def assemble_answer(
         selected.append(item)
 
     if not selected:
-        if no_evidence_action == 'handoff':
+        if no_evidence_action == 'document_navigation':
+            draft = draft.model_copy(update={
+                'status': 'needs_review',
+                'answer': '자료 목록은 상단 메뉴의 ‘문서 보관함’에서 확인할 수 있습니다. '
+                          '현재 계정에 공개된 문서와 원문을 확인해 주세요. '
+                          '문서 내용이나 준비 절차가 궁금하면 구체적으로 질문해 주세요.',
+                'steps': [], 'follow_up_questions': [],
+                'handoff_reason': '문서 목록은 문서 보관함에서 조회',
+            })
+        elif no_evidence_action == 'handoff':
             draft = draft.model_copy(update={
                 'status': 'handoff', 'answer': '이 사안의 최종 판단은 담당자 확인이 필요합니다. 현재 답변으로 책임이나 배상액을 확정할 수 없습니다.',
                 'steps': [], 'follow_up_questions': [], 'handoff_reason': '개별 사안의 최종 판단 요청',

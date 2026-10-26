@@ -13,6 +13,24 @@ LOOKUP = re.compile(r'얼마|금액|합계|납부|언제|기한|지급|로열티
 FOCUS_STOP = {'기준', '금액', '방법', '질문', '내용', '포함', '단계', '얼마', '언제', '어디', '무엇', '누구', '여부', '정도'}
 
 
+def is_document_navigation(question):
+    """A conservative navigation grammar, not a classifier for required papers.
+
+    Unknown qualifiers and mixed questions stay in counseling. Recipe menu
+    catalogs and questions about what must be submitted are separate intents.
+    """
+    text = re.sub(r'\s+', '', question).rstrip('?!？!.,。')
+    topic = (r'(?:(?:가맹|창업)(?:준비)?(?:에)?(?:필요한|관련(?:된)?)?'
+             r'|(?:매장운영|운영|위생|교육|계약)(?:에)?(?:필요한|관련(?:된)?)?'
+             r'|(?:현재|지금)?(?:조회|열람|접근|확인|사용)가능한|등록된)?')
+    documents = r'(?:자료|문서)(?:들)?'
+    show = r'(?:모아줘|모아주세요|찾아줘|찾아주세요|보여줘|보여주세요)'
+    return bool(re.fullmatch(topic + documents + r'(?:을|를)?(?:모두|전부|한번에)?' + show, text)
+                or re.fullmatch(topic + documents + r'(?:(?:은|는)|(?:은|는|이|가)?(?:뭐야|뭔가요|무엇인가요))', text)
+                or re.fullmatch(topic + documents + r'(?:의)?(?:목록|리스트)(?:을|를)?'
+                                + r'(?:(?:모두|전부)?(?:' + show + r'|알려줘|알려주세요))?', text))
+
+
 class QuestionPlan(ContractModel):
     intent: Literal['lookup', 'comparison', 'inclusion', 'procedure', 'judgment', 'unknown']
     resolved_question: Annotated[str, Field(min_length=1, max_length=2000)]

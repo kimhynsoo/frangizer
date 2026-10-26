@@ -51,6 +51,48 @@ def test_answer_sources_usage_and_contract(tmp_path):
         assert len(retriever.searches) == 1
 
 
+@pytest.mark.parametrize('role', ['owner', 'prospect'])
+@pytest.mark.parametrize('question', ['가맹 준비에 필요한 자료들을 모두 모아줘', '가맹준비에 필요한 자료는?'])
+def test_document_navigation_uses_no_search_or_model_and_preserves_contract(tmp_path, role, question):
+    client, model, retriever = client_for(tmp_path)
+    body = query_payload(question)
+    body['principal'].update(role=role, store_id=None if role == 'prospect' else body['principal']['store_id'])
+    with client:
+        response = client.post('/rag-query', headers=headers(role=role, store_id=body['principal']['store_id']), json=body)
+        assert response.status_code == 200, response.text
+        data = response.json()['data']
+        validate_contract(data, 'InternalAnswer')
+        assert '문서 보관함' in data['result']['answer']
+        assert data['result']['status'] == 'needs_review'
+        assert data['result']['sources'] == [] and not data['result']['handoff']
+        assert data['result']['follow_up_questions'] == []
+        assert not data['retrieval']['llm_called'] and data['usage']['embedding_tokens'] == 0
+        assert not retriever.searches
+        assert model.decide_calls == model.final_calls == model.verify_calls == 0
+
+
+@pytest.mark.parametrize('question', [
+    '가맹 준비에 필요한 자료들을 모두 모아줘', '창업 관련 문서 목록 알려주세요',
+    '조회 가능한 자료 목록', '문서들을 보여주세요',
+    '가맹준비에 필요한 자료는?', '창업 관련 문서는?', '가맹 준비에 필요한 자료가 뭐야?',
+])
+def test_document_navigation_requires_an_explicit_catalog_or_discovery_request(question):
+    from app.generation.question import is_document_navigation
+    assert is_document_navigation(question)
+
+
+@pytest.mark.parametrize('question', [
+    '가맹 준비에 필요한 서류가 뭐야?', '가맹 준비를 어떤 순서로 해야 해?',
+    '정보공개서 등록에 필요한 자료들을 모아줘', '교육비 얼마인지 알려주고 자료도 모아줘',
+    '가맹 준비 자료의 비용과 절차를 설명해줘', '자료 없이 계약해도 되나요?',
+    '등록된 레시피 목록 보여줘', '문서 목록에서 삭제해도 돼?',
+    '가맹 준비에 제출해야 하는 자료는?', '정보공개서에 첨부할 문서는?',
+])
+def test_document_navigation_does_not_swallow_substantive_or_recipe_requests(question):
+    from app.generation.question import is_document_navigation
+    assert not is_document_navigation(question)
+
+
 @pytest.mark.parametrize('only_progress', [False, True])
 def test_agent_progress_never_becomes_public_answer(tmp_path, only_progress):
     from langchain_core.messages import HumanMessage
