@@ -501,17 +501,19 @@ onUnmounted(() => {
                 <StatusBadge :status="row.index_status" />
               </td>
               <td data-label="작업">
-                <button class="button small ghost" @click="openHistory(row)">
-                  판본 보기<ArrowUpRight :size="14" />
-                </button>
-                <button
-                  v-if="management"
-                  class="button small secondary"
-                  :disabled="saving"
-                  @click="startNewVersion(row)"
-                >
-                  <Plus :size="14" />새 판본
-                </button>
+                <div class="document-row-actions">
+                  <button class="button small ghost" @click="openHistory(row)">
+                    판본 보기<ArrowUpRight :size="14" />
+                  </button>
+                  <button
+                    v-if="management"
+                    class="button small secondary"
+                    :disabled="saving"
+                    @click="startNewVersion(row)"
+                  >
+                    <Plus :size="14" />새 판본
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
