@@ -70,7 +70,7 @@ it("읽는 중 호출어만 말하면 멈춘 다음 질문을 다시 듣는다",
   expect(ask.mock.calls.map(([q]) => q)).toEqual(["첫 질문", "다음 질문"]);
   expect(speak.mock.calls.map(([text]) => text)).toEqual([
     "첫 답변",
-    "네, 말씀하세요",
+    "네",
     "새 답변",
   ]);
   session.stop();
