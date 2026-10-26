@@ -60,7 +60,7 @@ def assemble_answer(
             })
         elif no_evidence_action == 'clarify' and draft.follow_up_questions:
             draft = draft.model_copy(update={
-                'status': 'needs_review', 'answer': '답변에 필요한 상황을 먼저 확인해 주세요.',
+                'status': 'needs_review', 'answer': '\n'.join(draft.follow_up_questions),
                 'steps': [], 'handoff_reason': '답변이 달라지는 사용자 조건 확인 필요',
             })
         elif no_evidence_action == 'unverified':

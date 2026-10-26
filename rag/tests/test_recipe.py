@@ -9,7 +9,7 @@ import pytest
 from app.generation.recipe import RecipeShortcut, RagRuntime, parse_request
 from app.indexing.job import run_index_job
 from app.retrieval.faiss_store import FaissRetriever
-from app.schemas import InternalQuery
+from app.schemas import HistoryTurn, InternalQuery
 from tests.indexing.conftest import FakeEmbedder
 from tests.support import query_payload
 
@@ -62,11 +62,41 @@ def test_approved_recipe_quantity_without_llm(recipes, version, date, expected):
     assert response.usage.input_tokens == response.usage.output_tokens == response.usage.embedding_tokens == 0
 
 
+def test_temperature_reply_reuses_only_latest_request_and_current_sources(recipes):
+    shortcut, jobs = recipes
+    for previous_question in ('바닐라라떼 레시피 알려줘', '아메리카노 레시피', '바닐라라떼 우유 얼마?'):
+        original = context(jobs, previous_question)
+        pending = asyncio.run(shortcut.try_answer(original)).result
+        assert pending.follow_up_questions == ('HOT과 ICED 중 어느 레시피인가요?',)
+        for reply, label in [('핫', 'HOT'), ('아이스', 'ICED'), ('핫이요', 'HOT'),
+                             ('아이스로 주세요', 'ICED'), ('HOT', 'HOT'), ('iced', 'ICED')]:
+            followup = original.model_copy(update={'question': reply, 'history': (
+                HistoryTurn(question=previous_question, answer=pending.answer),)})
+            result = asyncio.run(shortcut.try_answer(followup))
+            assert result.result.status == 'answered'
+            assert label in result.result.answer and result.result.sources
+            assert result.retrieval.llm_called is False
+            if '우유' in previous_question:
+                assert ('210 mL' if label == 'HOT' else '170 mL') in result.result.answer
+            else:
+                assert result.result.steps
+    # Do not skip an unrelated latest turn or swallow a new substitution request.
+    for previous, reply in [('내일 직원 몇 명?', '아이스'),
+                            ('바닐라라떼랑 아메리카노 레시피', '핫'),
+                            ('바닐라라떼 레시피', '아이스 우유 대신 두유')]:
+        followup = context(jobs, reply).model_copy(update={'history': (
+            HistoryTurn(question='바닐라라떼 레시피', answer='HOT과 ICED 중 어느 레시피인가요?'),
+            HistoryTurn(question=previous, answer='확인 필요'),)})
+        assert asyncio.run(shortcut.try_answer(followup)) is None
+    assert asyncio.run(shortcut.try_answer(context(jobs, '핫'))) is None
+
+
 def test_recipe_temperature_and_completed_step_need_clarification(recipes):
     shortcut, jobs = recipes
     response = asyncio.run(shortcut.try_answer(context(jobs, '카페라떼 우유 얼마 넣어?')))
     assert response.result.status == 'needs_review'
     assert response.result.follow_up_questions == ('HOT과 ICED 중 어느 레시피인가요?',)
+    assert response.result.answer == 'HOT과 ICED 중 어느 레시피인가요?'
     response = asyncio.run(shortcut.try_answer(context(jobs, '아이스 딸기라떼 다음 단계는?')))
     assert response.result.status == 'needs_review'
     response = asyncio.run(shortcut.try_answer(context(jobs, '아이스 딸기라떼 1단계 완료, 다음 단계는?')))
