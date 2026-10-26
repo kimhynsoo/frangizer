@@ -120,8 +120,6 @@ def assemble_answer(
         ))
     answer = draft.answer
     answer = redact(answer)
-    if any(e.legal_temporal_unreviewed for e in selected):
-        answer = "[시행일 미검수] 인용 자료의 조문별 시행일 검수가 완료되지 않았습니다. " + answer
     if any(s.is_demo for s in sources):
         label = "합성 시연 레시피 기준입니다. " if draft.category == "recipe" else "합성 시연 자료 기준입니다. "
         answer = label + answer
