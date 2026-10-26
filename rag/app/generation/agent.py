@@ -20,7 +20,7 @@ from .evidence_policy import table_blocked, bind_literal_quantities
 from .model import Draft, CounselDraft, ProposedAnswer, ModelDriver
 from .review import (Assessment, AnswerItem, Grounding, Quote, Verification, verification_failures, source_units,
                      assessment_failures, block_failures, repair_details)
-from .question import (QuestionPlan, default_plan, needs_planning, validate_focus, focus_candidates,
+from .question import (QuestionPlan, default_plan, needs_planning, needs_reference, validate_focus, focus_candidates,
                        resolve_aggregate_followup, repair_single_focus, COMPARISON)
 from .table_evidence import table_rows, lookup_sources
 from .table_evidence import literal_claim_ids
@@ -168,13 +168,15 @@ class CounselAgent:
 
     def _context(self, s):
         c = s['context']
+        history = c.history if needs_reference(c) else ()
         return {'question': c.question,
-                'history': [t.model_dump() for t in c.history] if s['plan'] is None else [],
-                'user_question_chain': [t.question for t in c.history] + [c.question],
+                'history': [t.model_dump() for t in history] if s['plan'] is None else [],
+                'user_question_chain': [t.question for t in history] + [c.question],
                 'question_plan': s['plan'].model_dump() if s['plan'] else None,
                 'service_domain': os.environ.get('RAG_DOMAIN', '카페 가맹점 운영·창업'),
                 'as_of': c.as_of.isoformat(), 'basis': c.basis,
                 'answer_requirements': {'document_first': True,
+                                        'compare_both_sides': bool(COMPARISON.search(c.question)),
                                         'explain_components': bool(re.search(r'합계|합산|총액', c.question))}}
 
     def _safe_draft(self, s):
@@ -230,7 +232,7 @@ class CounselAgent:
         if (self.reranker is None or not updates['candidates']
                 or current['model_calls'] + 3 > self.max_model_calls
                 or self._remaining(current) < self._reserve('generation', 'verification') + 1):
-            return updates
+            return self._comparison_context(s, updates)
         candidates = list(updates['candidates'].values())[:30]
         updates['model_calls'] = current['model_calls'] + 1  # Count attempts, including provider/format failures.
         try:
@@ -252,7 +254,37 @@ class CounselAgent:
                            output_tokens=current['output_tokens'] + result.output_tokens)
         except Exception:
             self._diagnostic({**current, **updates}, 'reranking', ['RERANK_FALLBACK'])
-        return updates
+        return self._comparison_context(s, updates)
+
+    def _comparison_context(self, s, updates):
+        """Keep explicitly requested table fields in comparative writing context.
+
+        Candidate rows are already authorized and hash-checked. This only
+        prioritizes source text; it neither decides equality nor creates facts.
+        """
+        if s['plan'].intent != 'comparison':
+            return updates
+        question = re.sub(r'\s+', '', s['context'].question + '\n' + s['plan'].resolved_question)
+        fields = [word for word in ('기한', '금액', '비율') if word in question]
+        if not fields:
+            return updates
+        preferred, seen = [], set()
+        for item in updates['candidates'].values():
+            for row in table_rows(item):
+                label = re.sub(r'\s+', '', row['label'])
+                if (len(label) < 2 or label not in question or label in seen
+                        or not any(word in field['column'] and field['value']
+                                   for field in row['fields'] for word in fields)):
+                    continue
+                preferred.append(item)
+                seen.add(label)
+        evidence, size = {}, 0
+        for item in [*preferred, *updates['evidence'].values()]:
+            cid = item.metadata.chunk_id
+            if cid not in evidence and len(evidence) < 20 and size + len(item.text) <= 12000:
+                evidence[cid] = item
+                size += len(item.text)
+        return {**updates, 'evidence': evidence}
 
     async def _tools(self, s):
         evidence = dict(s['evidence'])
@@ -397,7 +429,7 @@ class CounselAgent:
             # Clarifications also need the source that makes the question necessary.
             covered = {b.item_id for b in s['draft'].blocks if b.placement == 'answer'}
             payload = {'original_question': s['context'].question, 'question': s['plan'].resolved_question,
-                       'user_question_chain': [t.question for t in s['context'].history] + [s['context'].question],
+                       'user_question_chain': self._context(s)['user_question_chain'],
                        'question_plan': s['plan'].model_dump(),
                        'items': [i.to_payload() for i in s['assessment'].items],
                        'as_of': s['context'].as_of.isoformat(), 'evidence': evidence,
