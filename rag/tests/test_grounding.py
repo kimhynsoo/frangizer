@@ -22,6 +22,45 @@ def test_missing_quantity_binding_is_filled_only_from_a_unique_cited_literal_pai
     assert not b.quantities
 
 
+def test_category_count_is_bound_only_when_explicitly_present_in_cited_source():
+    from app.generation.evidence_policy import bind_literal_quantities, quantity_failures
+    from app.generation.review import evidence_units
+    e = source('부담은 크게 다음의 4가지로 구분합니다.')
+    b = block(text='원문은 부담을 크게 4가지로 구분합니다.')
+    result = bind_literal_quantities([b], {e.metadata.chunk_id: e})[0]
+    assert result.text == b.text and result.evidence_refs == b.evidence_refs
+    assert [(q.value, q.unit) for q in result.quantities] == [('4', '가지')]
+    assert not quantity_failures(result, evidence_units({e.metadata.chunk_id: e}))
+    wrong = block(text='부담은 3가지입니다.')
+    result = bind_literal_quantities([wrong], {e.metadata.chunk_id: e})[0]
+    assert not result.quantities
+    assert 'MISSING_QUANTITY_BINDING' in quantity_failures(result, evidence_units({e.metadata.chunk_id: e}))
+
+
+def test_unused_quantity_metadata_cannot_reject_an_otherwise_grounded_explanation():
+    e = source('교육비와 이행보증금은 최초 부담에 포함됩니다.')
+    p = proposal().model_copy(update={'blocks': [block(item_id='rule', text=e.text, quantities=[
+        Quantity(label='교육비', value='3,300', unit='천원', evidence_ref=ref('uncited-table'))])]})
+    driver = Driver([p])
+    result = run(driver, FixtureRetriever([e]))
+    assert result.result.status == 'answered' and e.text in result.result.answer
+    assert '3,300' not in result.result.answer
+    assert driver.calls == ['draft', 'verify']
+    assert p.blocks[0].quantities  # Provider output is not mutated.
+
+
+def test_unused_binding_cannot_cover_a_different_printed_number():
+    from app.generation.evidence_policy import bind_literal_quantities, quantity_failures
+    from app.generation.review import evidence_units
+    e = source('교육비: 3,300천원')
+    b = block(text='교육비는 33,000천원입니다.', quantities=[
+        Quantity(label='교육비', value='3,300', unit='천원', evidence_ref=ref())])
+    result = bind_literal_quantities([b], {e.metadata.chunk_id: e})[0]
+    assert result.text == b.text and result.evidence_refs == b.evidence_refs
+    assert not result.quantities
+    assert 'MISSING_QUANTITY_BINDING' in quantity_failures(result, evidence_units({e.metadata.chunk_id: e}))
+
+
 @pytest.mark.parametrize('case', ['wrong_value', 'wrong_unit', 'ambiguous', 'not_cited'])
 def test_quantity_binding_never_guesses_a_value_unit_or_source(case):
     from app.generation.evidence_policy import bind_literal_quantities

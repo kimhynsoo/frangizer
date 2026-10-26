@@ -225,7 +225,7 @@ class CounselAgent:
                  for query in s['plan'].queries[:self.max_search_calls]]
         updates = await self._tools({**s, 'pending_tools': calls})
         current = {**s, **updates}
-        if s['plan'].intent == 'lookup' and lookup_sources(s['plan'].resolved_question, current['evidence']):
+        if self._exact_coverage(current) is not None:
             return updates
         # One ranking call for the combined initial candidates. Corrections use
         # direct context reads or Hybrid search; they do not pay for ranking again.
@@ -676,6 +676,9 @@ class CounselAgent:
         action = state['assessment'].action
         no_evidence_action = action if state['verified'] and action in ('clarify', 'handoff') else None
         if not state['verified'] and (self._has_facts(state['assessment']) or action == 'clarify'):
+            no_evidence_action = 'unverified'
+        elif (no_evidence_action is None and not state['draft'].used_chunk_ids
+                and self._has_facts(state['assessment'])):
             no_evidence_action = 'unverified'
         elif (no_evidence_action is None and not state['draft'].used_chunk_ids and any(
                 i.evidence_refs and i.grounding.applicability == 'needs_reference'
